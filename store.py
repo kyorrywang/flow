@@ -15,6 +15,7 @@ def utc_now() -> str:
 @dataclass
 class RunRecord:
     run_id: str
+    parent_run_id: str | None
     flow_name: str
     current_node: str
     status: str
@@ -43,13 +44,15 @@ class SqliteStore:
 
                 CREATE TABLE IF NOT EXISTS runs (
                     run_id TEXT PRIMARY KEY,
+                    parent_run_id TEXT,
                     flow_name TEXT NOT NULL,
                     current_node TEXT NOT NULL,
                     status TEXT NOT NULL,
                     context_json TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (parent_run_id) REFERENCES runs(run_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS events (
@@ -63,8 +66,15 @@ class SqliteStore:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_events_run_id ON events(run_id);
+                CREATE INDEX IF NOT EXISTS idx_runs_parent_run_id ON runs(parent_run_id);
                 """
             )
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+            }
+            if "parent_run_id" not in columns:
+                conn.execute("ALTER TABLE runs ADD COLUMN parent_run_id TEXT")
 
     def create_run(
         self,
@@ -72,6 +82,7 @@ class SqliteStore:
         flow_name: str,
         current_node: str,
         status: str,
+        parent_run_id: str | None = None,
         context: dict[str, Any] | None = None,
     ) -> RunRecord:
         now = utc_now()
@@ -81,11 +92,11 @@ class SqliteStore:
             conn.execute(
                 """
                 INSERT INTO runs (
-                    run_id, flow_name, current_node, status, context_json,
+                    run_id, parent_run_id, flow_name, current_node, status, context_json,
                     version, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
-                (run_id, flow_name, current_node, status, payload, now, now),
+                (run_id, parent_run_id, flow_name, current_node, status, payload, now, now),
             )
 
         self.append_event(run_id, current_node, "run_created", {"status": status})
@@ -189,6 +200,7 @@ class SqliteStore:
     def _row_to_run(row: sqlite3.Row) -> RunRecord:
         return RunRecord(
             run_id=row["run_id"],
+            parent_run_id=row["parent_run_id"],
             flow_name=row["flow_name"],
             current_node=row["current_node"],
             status=row["status"],
