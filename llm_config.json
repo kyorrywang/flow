@@ -1,0 +1,9 @@
+{
+  "provider": "anthropic",
+  "api_key": "sk-cp-D6eBxlw1Yo70nZOngfq5GarrepEHKRqBq0zipgYQPoCT5ClsBAIcArZCD6sPzh3lM1QVei8BTx4BSZBhhRMpKa8nGrQUA0-qoOmuuYrx6A2Oh12jlieWsm4",
+  "model": "MiniMax-M2.7-highspeed",
+  "base_url": "https://api.minimax.com/anthropic/v1",
+  "timeout": 120,
+  "temperature": 0.7,
+  "max_tokens": 200000
+}
