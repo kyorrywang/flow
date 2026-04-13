@@ -18,7 +18,7 @@ class FanOutNode:
         context = dict(state.context)
         count = int(resolve_context_value(self.count_from, context))
         child_flow_name = self.child_flow_name or state.flow_name
-        run_id_prefix = f"{state.run_id}-{self.node_id}"
+        run_id_prefix = f"{state.run_id}__{self.node_id}"
 
         def build_child_context(index: int) -> dict[str, Any]:
             child_context = dict(context)

@@ -17,7 +17,7 @@ class LLMConfig:
     api_key: str
     model: str
     base_url: str
-    timeout: int = 60
+    timeout: int = 180
     temperature: float = 0.2
     max_tokens: int = 8192
 
@@ -187,23 +187,33 @@ class LLMClient:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            url=url,
-            data=data,
-            headers=headers,
-            method="POST",
-        )
 
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout) as response:
-                body = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            raise LLMError(
-                f"LLM request failed with HTTP {exc.code}: {error_body}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise LLMError(f"LLM request failed: {exc}") from exc
+        import time
+        import random
+        max_retries = 3
+        body = ""
+        for attempt in range(max_retries):
+            request = urllib.request.Request(
+                url=url,
+                data=data,
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.config.timeout) as response:
+                    body = response.read().decode("utf-8")
+                break
+            except urllib.error.HTTPError as exc:
+                if attempt == max_retries - 1 or exc.code not in {429, 500, 502, 503, 504}:
+                    error_body = exc.read().decode("utf-8", errors="replace")
+                    raise LLMError(
+                        f"LLM request failed with HTTP {exc.code}: {error_body}"
+                    ) from exc
+                time.sleep(2 ** (attempt + 1) + random.uniform(0, 1))
+            except urllib.error.URLError as exc:
+                if attempt == max_retries - 1:
+                    raise LLMError(f"LLM request failed: {exc}") from exc
+                time.sleep(2 ** (attempt + 1))
 
         try:
             return json.loads(body)

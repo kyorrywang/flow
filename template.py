@@ -62,7 +62,11 @@ class TemplateRuntime:
     def _register_nodes(self) -> None:
         for node in self.definition.nodes:
             node_instance = build_node(node["type"], node, self)
-            self.engine.register_node(node["id"], node_instance.execute)
+            self.engine.register_node(
+                node["id"], 
+                node_instance.execute,
+                metadata={"retry": node.get("retry", 0), "retry_delay": node.get("retry_delay", 0)}
+            )
 
 
 

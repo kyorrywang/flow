@@ -38,9 +38,11 @@ class FlowEngine:
     ) -> None:
         self.store = store
         self.nodes: dict[str, NodeHandler] = {}
+        self.node_metadata: dict[str, dict[str, Any]] = {}
 
-    def register_node(self, name: str, handler: NodeHandler) -> None:
+    def register_node(self, name: str, handler: NodeHandler, metadata: dict[str, Any] | None = None) -> None:
         self.nodes[name] = handler
+        self.node_metadata[name] = metadata or {}
 
     def create_run(
         self,
@@ -77,6 +79,14 @@ class FlowEngine:
             child_run_id = None
             if run_id_prefix:
                 child_run_id = f"{run_id_prefix}-{index:03d}"
+                try:
+                    # Idempotency check: if child run already exists, skip creation
+                    child = self.store.get_run(child_run_id)
+                    children.append(child)
+                    continue
+                except KeyError:
+                    pass
+
             child = self.create_run(
                 flow_name=flow_name,
                 initial_context=context_builder(index),
@@ -102,26 +112,55 @@ class FlowEngine:
         return state
 
     def run_tree(self, root_run_id: str, max_steps: int = 1000) -> RunRecord:
+        import time
         steps = 0
-        while steps < max_steps:
-            running_ids = []
-            queue = [root_run_id]
-            while queue:
-                curr_id = queue.pop(0)
-                record = self.store.get_run(curr_id)
-                if record.status == RUNNING:
-                    running_ids.append(curr_id)
-                children = self.store.get_children(curr_id)
-                queue.extend([c.run_id for c in children])
-                
-            if not running_ids:
-                break
-                
-            for rid in running_ids:
+        pending_ids = set()
+        
+        queue = [root_run_id]
+        while queue:
+            curr_id = queue.pop(0)
+            record = self.store.get_run(curr_id)
+            if record.status == RUNNING:
+                pending_ids.add(curr_id)
+            children = self.store.get_children(curr_id)
+            queue.extend([c.run_id for c in children])
+            
+        while pending_ids and steps < max_steps:
+            current_batch = list(pending_ids)
+            did_work = False
+            min_wait = float('inf')
+            
+            for rid in current_batch:
                 if steps >= max_steps:
                     break
-                self.step(rid)
+                    
+                record = self.store.get_run(rid)
+                retry_until = record.context.get("_retry_until", 0)
+                if retry_until > 0:
+                    wait_time = retry_until - time.time()
+                    if wait_time > 0:
+                        min_wait = min(min_wait, wait_time)
+                        continue
+                        
+                did_work = True
+                record = self.step(rid)
                 steps += 1
+                
+                if record.status != RUNNING:
+                    pending_ids.discard(rid)
+                
+                children = self.store.get_children(rid)
+                for c in children:
+                    if c.status == RUNNING:
+                        pending_ids.add(c.run_id)
+                        
+                if record.parent_run_id:
+                    parent = self.store.get_run(record.parent_run_id)
+                    if parent.status == RUNNING:
+                        pending_ids.add(parent.run_id)
+                        
+            if not did_work and pending_ids:
+                time.sleep(min(1.0, min_wait))
                 
         return self.store.get_run(root_run_id)
 
@@ -145,6 +184,11 @@ class FlowEngine:
         try:
             result = handler(state)
             next_context = dict(state.context)
+            if "_retry_count" in next_context:
+                del next_context["_retry_count"]
+            if "_retry_until" in next_context:
+                del next_context["_retry_until"]
+                
             next_context.update(result.context_update)
             updated = self.store.update_run(
                 run_id,
@@ -164,20 +208,46 @@ class FlowEngine:
                     self.resume(parent.run_id)
             return updated
         except Exception as exc:
-            failure_context = dict(state.context)
-            failure_context["last_error"] = str(exc)
-            updated = self.store.update_run(
-                run_id,
-                status=FAILED,
-                context=failure_context,
-            )
-            self.store.append_event(
-                run_id,
-                state.current_node,
-                "node_failed",
-                {"error": str(exc)},
-            )
-            return updated
+            metadata = self.node_metadata.get(state.current_node, {})
+            max_retries = metadata.get("retry", 0)
+            current_retries = state.context.get("_retry_count", 0)
+
+            if current_retries < max_retries:
+                import time
+                failure_context = dict(state.context)
+                failure_context["_retry_count"] = current_retries + 1
+                failure_context["last_error"] = str(exc)
+                retry_delay = metadata.get("retry_delay", 0)
+                if retry_delay > 0:
+                    failure_context["_retry_until"] = time.time() + retry_delay
+
+                updated = self.store.update_run(
+                    run_id,
+                    status=RUNNING,
+                    context=failure_context,
+                )
+                self.store.append_event(
+                    run_id,
+                    state.current_node,
+                    "node_retry",
+                    {"error": str(exc), "attempt": current_retries + 1, "max_retries": max_retries},
+                )
+                return updated
+            else:
+                failure_context = dict(state.context)
+                failure_context["last_error"] = str(exc)
+                updated = self.store.update_run(
+                    run_id,
+                    status=FAILED,
+                    context=failure_context,
+                )
+                self.store.append_event(
+                    run_id,
+                    state.current_node,
+                    "node_failed",
+                    {"error": str(exc)},
+                )
+                return updated
 
     def pause(self, run_id: str, reason: str = "paused by operator") -> RunRecord:
         current = self.store.get_run(run_id)
@@ -303,19 +373,15 @@ def get_run_root(run_id: str) -> Path:
 
 
 def get_run_db_path(run_id: str) -> Path:
-    parts = run_id.split("-")
-    for i in range(len(parts), 0, -1):
-        candidate_root = "-".join(parts[:i])
-        db_path = Path("outputs") / candidate_root / "run.db"
-        if db_path.exists():
-            return db_path
-    return Path("outputs") / run_id / "run.db"
+    parts = run_id.split("__")
+    return Path("outputs") / parts[0] / "run.db"
 
 
 def build_engine_for_create(template_path: Path, run_id: str) -> tuple[FlowEngine, Any]:
     from template import TemplateRuntime
     from nodes.writer import OutputWriter
-    import nodes  # trigger registry
+    from nodes import ensure_defaults_registered
+    ensure_defaults_registered()
 
     store = SqliteStore(get_run_db_path(run_id))
     config_values = load_llm_config()
@@ -328,7 +394,8 @@ def build_engine_for_create(template_path: Path, run_id: str) -> tuple[FlowEngin
 def build_engine_for_existing_run(run_id: str) -> tuple[FlowEngine, Any, RunRecord]:
     from template import TemplateRuntime
     from nodes.writer import OutputWriter
-    import nodes  # trigger registry
+    from nodes import ensure_defaults_registered
+    ensure_defaults_registered()
 
     db_path = get_run_db_path(run_id)
     store = SqliteStore(db_path)

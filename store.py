@@ -98,8 +98,8 @@ class SqliteStore:
                 """,
                 (run_id, parent_run_id, flow_name, current_node, status, payload, now, now),
             )
+            self._append_event_conn(conn, run_id, current_node, "run_created", {"status": status})
 
-        self.append_event(run_id, current_node, "run_created", {"status": status})
         return self.get_run(run_id)
 
     def get_run(self, run_id: str) -> RunRecord:
@@ -158,19 +158,29 @@ class SqliteStore:
         payload: dict[str, Any] | None = None,
     ) -> None:
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO events (run_id, node, event_type, payload_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    node,
-                    event_type,
-                    json.dumps(payload or {}, ensure_ascii=False),
-                    utc_now(),
-                ),
-            )
+            self._append_event_conn(conn, run_id, node, event_type, payload)
+
+    def _append_event_conn(
+        self,
+        conn: sqlite3.Connection,
+        run_id: str,
+        node: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO events (run_id, node, event_type, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                node,
+                event_type,
+                json.dumps(payload or {}, ensure_ascii=False),
+                utc_now(),
+            ),
+        )
 
     def get_children(self, parent_run_id: str) -> list[RunRecord]:
         with self._connect() as conn:

@@ -10,14 +10,14 @@ class WaitInputNode:
         self.message = node_def.get("message", "")
 
     def execute(self, state: Any) -> StepResult:
-        context = dict(state.context)
-        context["resume_to"] = self.on_approved
-        context["reject_to"] = self.on_rejected
-        context["gate_message"] = self.message
         return StepResult(
             next_node=self.node_id,
             status=WAITING_INPUT,
-            context_update=context,
+            context_update={
+                "resume_to": self.on_approved,
+                "reject_to": self.on_rejected,
+                "gate_message": self.message,
+            },
             event_type="waiting_for_input",
             event_payload={"message": self.message},
         )
