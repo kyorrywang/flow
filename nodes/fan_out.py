@@ -24,6 +24,7 @@ class FanOutNode:
             child_context = dict(context)
             child_context["fanout_index"] = index
             child_context["fanout_target"] = self.target
+            child_context["parent_run_id"] = state.run_id
 
             for key, value in self.child_context_mapping.items():
                 child_context[key] = render_value(value, child_context, index=index)
