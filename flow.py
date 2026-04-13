@@ -14,6 +14,7 @@ from store import RunRecord, SqliteStore
 RUNNING = "running"
 PAUSED = "paused"
 WAITING_INPUT = "waiting_input"
+WAITING_CHILDREN = "waiting_children"
 FAILED = "failed"
 DONE = "done"
 
@@ -100,10 +101,34 @@ class FlowEngine:
             steps += 1
         return state
 
+    def run_tree(self, root_run_id: str, max_steps: int = 1000) -> RunRecord:
+        steps = 0
+        while steps < max_steps:
+            running_ids = []
+            queue = [root_run_id]
+            while queue:
+                curr_id = queue.pop(0)
+                record = self.store.get_run(curr_id)
+                if record.status == RUNNING:
+                    running_ids.append(curr_id)
+                children = self.store.get_children(curr_id)
+                queue.extend([c.run_id for c in children])
+                
+            if not running_ids:
+                break
+                
+            for rid in running_ids:
+                if steps >= max_steps:
+                    break
+                self.step(rid)
+                steps += 1
+                
+        return self.store.get_run(root_run_id)
+
     def step(self, run_id: str) -> RunRecord:
         state = self.store.get_run(run_id)
 
-        if state.status in {PAUSED, WAITING_INPUT, DONE}:
+        if state.status in {PAUSED, WAITING_INPUT, WAITING_CHILDREN, DONE, FAILED}:
             return state
 
         handler = self.nodes.get(state.current_node)
@@ -133,6 +158,10 @@ class FlowEngine:
                 result.event_type,
                 result.event_payload,
             )
+            if updated.status in {DONE, FAILED} and updated.parent_run_id:
+                parent = self.store.get_run(updated.parent_run_id)
+                if parent.status == WAITING_CHILDREN:
+                    self.resume(parent.run_id)
             return updated
         except Exception as exc:
             failure_context = dict(state.context)
@@ -208,7 +237,7 @@ class FlowEngine:
 
 
 def load_llm_config() -> dict[str, Any]:
-    path = Path("confg.json")
+    path = Path("config.json")
     if not path.exists():
         return {}
 
@@ -228,7 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_cmd = subparsers.add_parser("run", help="run until paused or completed")
     run_cmd.add_argument("--run-id", required=True)
-    run_cmd.add_argument("--max-steps", type=int, default=100)
+    run_cmd.add_argument("--max-steps", type=int, default=1000)
+    run_cmd.add_argument("--tree", action="store_true", help="run parent and all child runs automatically")
 
     input_cmd = subparsers.add_parser("input", help="submit human input")
     input_cmd.add_argument("--run-id", required=True)
@@ -273,7 +303,13 @@ def get_run_root(run_id: str) -> Path:
 
 
 def get_run_db_path(run_id: str) -> Path:
-    return get_run_root(run_id) / "run.db"
+    parts = run_id.split("-")
+    for i in range(len(parts), 0, -1):
+        candidate_root = "-".join(parts[:i])
+        db_path = Path("outputs") / candidate_root / "run.db"
+        if db_path.exists():
+            return db_path
+    return Path("outputs") / run_id / "run.db"
 
 
 def build_engine_for_create(template_path: Path, run_id: str) -> tuple[FlowEngine, Any]:
@@ -330,7 +366,10 @@ def main() -> None:
 
     if args.command == "run":
         engine, _runtime, _record = build_engine_for_existing_run(args.run_id)
-        record = engine.run_until_stop(args.run_id, max_steps=args.max_steps)
+        if args.tree:
+            record = engine.run_tree(args.run_id, max_steps=args.max_steps)
+        else:
+            record = engine.run_until_stop(args.run_id, max_steps=args.max_steps)
         print(json.dumps(record.__dict__, ensure_ascii=False, indent=2))
         return
 

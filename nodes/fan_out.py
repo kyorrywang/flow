@@ -38,10 +38,9 @@ class FanOutNode:
             run_id_prefix=run_id_prefix,
         )
 
-        context[self.save_as] = [child.run_id for child in children]
         return StepResult(
             next_node=self.next_node,
             status=RUNNING,
-            context_update=context,
+            context_update={self.save_as: [child.run_id for child in children]},
             event_payload={"spawned_children": len(children), "target": self.target},
         )

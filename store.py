@@ -123,8 +123,8 @@ class SqliteStore:
         context: dict[str, Any] | None = None,
     ) -> RunRecord:
         current = self.get_run(run_id)
-        next_node = current_node or current.current_node
-        next_status = status or current.status
+        next_node = current_node if current_node is not None else current.current_node
+        next_status = status if status is not None else current.status
         next_context = context if context is not None else current.context
         updated_at = utc_now()
 
@@ -171,6 +171,14 @@ class SqliteStore:
                     utc_now(),
                 ),
             )
+
+    def get_children(self, parent_run_id: str) -> list[RunRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE parent_run_id = ?",
+                (parent_run_id,),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
 
     def list_events(self, run_id: str) -> list[dict[str, Any]]:
         with self._connect() as conn:

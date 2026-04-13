@@ -35,7 +35,7 @@ ENV/
 # Project specific ignores
 templates/
 outputs/
-confg.json
+config.json
 
 # IDEs
 .vscode/

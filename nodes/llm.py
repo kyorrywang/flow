@@ -19,7 +19,7 @@ class LLMConfig:
     base_url: str
     timeout: int = 60
     temperature: float = 0.2
-    max_tokens: int = 2000
+    max_tokens: int = 8192
 
     def __post_init__(self) -> None:
         self.provider = self.provider.lower().strip()

@@ -31,7 +31,7 @@ class LLMNode:
                 base_url=merged_config["base_url"],
                 timeout=merged_config.get("timeout", 60),
                 temperature=merged_config.get("temperature", 0.2),
-                max_tokens=merged_config.get("max_tokens", 2000),
+                max_tokens=merged_config.get("max_tokens", 8192),
             )
         )
 
@@ -46,8 +46,9 @@ class LLMNode:
             result = self.llm.generate(system=self.system_prompt, prompt=prompt)
             content = result.text.strip()
             
+        context_update = {}
         if self.save_as:
-            context[self.save_as] = content
+            context_update[self.save_as] = content
             
         if self.output_file:
             relative_path = self.env.writer.render_path(self.output_file, context)
@@ -59,11 +60,11 @@ class LLMNode:
             )
             files = dict(context.get("files", {}))
             files[self.save_as or self.node_id] = written_path
-            context["files"] = files
+            context_update["files"] = files
 
         return StepResult(
             next_node=self.next_node,
             status=RUNNING,
-            context_update=context,
+            context_update=context_update,
             event_payload={"node_type": "llm", "save_as": self.save_as},
         )
