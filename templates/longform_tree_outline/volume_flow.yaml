@@ -39,11 +39,11 @@ nodes:
       - 世界观摘要：{worldview_summary}
       - 力量体系摘要：{power_system_summary}
       - 结局摘要：{ending_summary}
-      - 主角内核：{character_core[protagonist][name]} - {character_core[protagonist][personality_flaw]}
-      - 成长方向认知升级：{growth_direction[cognitive_upgrades]}
-      - 爽点密度标准：{pacing_plan_volume_full[cool_point_density]}
-      - 情绪曲线（请提取卷序号={volume_index}对应的条目）：{emotion_curves_full}
-      - 伏笔清单（请筛选与本卷相关的条目）：{foreshadowing_plan_full}
+      - 主角内核：{character_core}
+      - 成长方向认知升级：{growth_direction}
+      - 爽点密度规划：{pacing_plan_volume_full}
+      - 情绪曲线：{emotion_curves_full}
+      - 伏笔清单：{foreshadowing_plan_full}
       - 金手指：{golden_finger}
 
       请输出 JSON：
@@ -131,14 +131,14 @@ nodes:
       【全局上下文（摘要层）】
       - 世界观摘要：{worldview_summary}
       - 力量体系摘要：{power_system_summary}
-      - 主角内核：{character_core[protagonist]}
+      - 主角内核：{character_core}
       - 金手指：{golden_finger}
       - 结局摘要：{ending_summary}
 
       【状态追踪（基于本卷生成结果）】
       - 本卷力量等级范围：{volume_power_range}
       - 本卷金手指能力边界：{volume_golden_finger}
-      - 本卷阶段分解：{volume_overview_data[phase_breakdown]}
+      - 本卷阶段分解：{volume_overview_data}
 
       检查项：
       1. 卷末状态与下一卷起始状态是否一致

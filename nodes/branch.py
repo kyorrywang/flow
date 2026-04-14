@@ -11,7 +11,7 @@ class BranchNode:
         self.env = env
 
     def execute(self, state: Any) -> StepResult:
-        from nodes.utils import resolve_context_value
+        from utils.template_utils import resolve_context_value
         context = dict(state.context)
         
         try:

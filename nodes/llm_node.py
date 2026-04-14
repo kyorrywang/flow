@@ -1,7 +1,7 @@
 from typing import Any
 from flow import RUNNING, StepResult
 from nodes.base import NodeEnvironment
-from nodes.llm_utils import build_llm_client
+from utils.llm_utils import build_llm_client
 
 class LLMNode:
     def __init__(self, node_def: dict[str, Any], env: NodeEnvironment) -> None:
@@ -16,7 +16,7 @@ class LLMNode:
         self.llm = build_llm_client(node_def.get("llm", {}), env)
 
     def execute(self, state: Any) -> StepResult:
-        from nodes.writer import SafeFormatDict
+        from tools.writer import SafeFormatDict
         context = dict(state.context)
         prompt = self.prompt_template.format_map(SafeFormatDict(context))
         

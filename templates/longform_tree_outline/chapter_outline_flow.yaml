@@ -102,15 +102,13 @@ nodes:
 
       只保留正文生成需要感知的信息。
 
-      输出 JSON：
+      输出 JSON（直接返回摘要对象，不要包裹在任何键中）：
       {{
-        "chapter_summary": {{
-          "core_event_summary": "核心事件摘要（一句话）",
-          "emotional_arc": "情绪弧线（一句话）",
-          "key_scenes": "关键场景列表（仅名称+一句话描述）",
-          "cool_point_summary": "爽点摘要（一句话）",
-          "hook_summary": "钩子摘要（一句话）"
-        }}
+        "core_event_summary": "核心事件摘要（一句话）",
+        "emotional_arc": "情绪弧线（一句话）",
+        "key_scenes": "关键场景列表（仅名称+一句话描述）",
+        "cool_point_summary": "爽点摘要（一句话）",
+        "hook_summary": "钩子摘要（一句话）"
       }}
     save_as: "chapter_summary_data"
     llm:

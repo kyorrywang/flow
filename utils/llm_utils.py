@@ -1,7 +1,6 @@
 from typing import Any
-from nodes.base import NodeEnvironment
 
-def build_llm_client(node_llm_config: dict[str, Any], env: NodeEnvironment) -> Any:
+def build_llm_client(node_llm_config: dict[str, Any], env: Any) -> Any:
     merged_config = dict(env.config.get("llm", {}))
     merged_config.update(node_llm_config)
 
@@ -9,7 +8,7 @@ def build_llm_client(node_llm_config: dict[str, Any], env: NodeEnvironment) -> A
     if not all(merged_config.get(field) for field in required_fields):
         return None
 
-    from nodes.llm import LLMConfig, LLMClient
+    from tools.llm import LLMConfig, LLMClient
     return LLMClient(
         LLMConfig(
             provider=merged_config["provider"],

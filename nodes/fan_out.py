@@ -1,7 +1,8 @@
 from typing import Any
 from flow import RUNNING, StepResult
 from nodes.base import NodeEnvironment
-from nodes.utils import resolve_context_value, render_value
+from utils.fanout_utils import compute_child_template_path, build_child_context
+from utils.template_utils import resolve_context_value
 
 class FanOutNode:
     def __init__(self, node_def: dict[str, Any], env: NodeEnvironment) -> None:
@@ -17,26 +18,30 @@ class FanOutNode:
     def execute(self, state: Any) -> StepResult:
         context = dict(state.context)
         count = int(resolve_context_value(self.count_from, context))
-        child_flow_name = self.child_flow_name or state.flow_name
-        run_id_prefix = f"{state.run_id}__{self.node_id}"
+        child_template_path = compute_child_template_path(
+            context.get("template_path", ""),
+            self.child_flow_name,
+        )
 
-        def build_child_context(index: int) -> dict[str, Any]:
-            child_context = dict(context)
-            child_context["fanout_index"] = index
-            child_context["fanout_target"] = self.target
-            child_context["parent_run_id"] = state.run_id
-
-            for key, value in self.child_context_mapping.items():
-                child_context[key] = render_value(value, child_context, index=index)
-            return child_context
+        def make_child_context(index: int) -> dict[str, Any]:
+            return build_child_context(
+                index=index,
+                context=context,
+                target=self.target,
+                state_run_id=state.run_id,
+                state_flow_name=state.flow_name,
+                child_flow_name=self.child_flow_name,
+                child_template_path=child_template_path,
+                child_context_mapping=self.child_context_mapping,
+            )
 
         children = self.env.engine.spawn_children(
             state.run_id,
             count=count,
-            flow_name=child_flow_name,
+            flow_name=self.child_flow_name or state.flow_name,
             start_node=self.target,
-            context_builder=build_child_context,
-            run_id_prefix=run_id_prefix,
+            context_builder=make_child_context,
+            run_id_prefix=f"{state.run_id}__{self.node_id}",
         )
 
         return StepResult(

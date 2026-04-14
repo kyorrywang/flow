@@ -70,9 +70,14 @@ class LLMClient:
         final_system = f"{system}\n\n{guidance}" if system else guidance
         result = self.generate(system=final_system, prompt=prompt, messages=messages)
 
+        from utils.json_utils import parse_llm_json
+        
         try:
-            return json.loads(result.text), result
-        except json.JSONDecodeError as exc:
+            parsed = parse_llm_json(result.text)
+            return parsed, result
+        except Exception as exc:
+            if isinstance(exc, LLMError):
+                raise
             raise LLMError(f"Model did not return valid JSON: {result.text}") from exc
 
     def _normalize_messages(

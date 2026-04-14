@@ -35,7 +35,7 @@ class GatherNode:
                 
         result_value: Any = gathered
         if self.format_template:
-            from nodes.writer import SafeFormatDict
+            from tools.writer import SafeFormatDict
             text_blocks = []
             for data in gathered:
                 text_blocks.append(self.format_template.format_map(SafeFormatDict(data)))

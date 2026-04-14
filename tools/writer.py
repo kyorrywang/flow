@@ -17,7 +17,11 @@ class OutputWriter:
         content: str,
         overwrite: bool = True,
     ) -> str:
-        target = self.root_dir / run_id / relative_path
+        # 如果 relative_path 已经包含了输出目录前缀，直接使用
+        if relative_path.startswith("outputs/") or relative_path.startswith("outputs\\"):
+            target = Path(relative_path)
+        else:
+            target = self.root_dir / run_id / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists() and not overwrite:
             return str(target.resolve())

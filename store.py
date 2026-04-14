@@ -89,15 +89,25 @@ class SqliteStore:
         payload = json.dumps(context or {}, ensure_ascii=False)
 
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO runs (
-                    run_id, parent_run_id, flow_name, current_node, status, context_json,
-                    version, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-                """,
-                (run_id, parent_run_id, flow_name, current_node, status, payload, now, now),
-            )
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO runs (
+                        run_id, parent_run_id, flow_name, current_node, status, context_json,
+                        version, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    """,
+                    (run_id, parent_run_id, flow_name, current_node, status, payload, now, now),
+                )
+            except Exception as e:
+                # 调试：打印导致错误的参数
+                print(f"[DEBUG] create_run failed:")
+                print(f"  run_id={run_id}")
+                print(f"  parent_run_id={parent_run_id} (type: {type(parent_run_id).__name__})")
+                print(f"  flow_name={flow_name}")
+                print(f"  current_node={current_node}")
+                print(f"  payload length={len(payload)}")
+                raise
             self._append_event_conn(conn, run_id, current_node, "run_created", {"status": status})
 
         return self.get_run(run_id)
@@ -128,6 +138,9 @@ class SqliteStore:
         next_context = context if context is not None else current.context
         updated_at = utc_now()
 
+        # 序列化 context 为 JSON 字符串
+        context_json = json.dumps(next_context, ensure_ascii=False)
+
         with self._connect() as conn:
             conn.execute(
                 """
@@ -142,7 +155,7 @@ class SqliteStore:
                 (
                     next_node,
                     next_status,
-                    json.dumps(next_context, ensure_ascii=False),
+                    context_json,
                     updated_at,
                     run_id,
                 ),

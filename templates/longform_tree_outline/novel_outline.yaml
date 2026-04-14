@@ -91,26 +91,29 @@ nodes:
     system_prompt: |
       你是资深网络小说世界观架构师。请设计世界观框架。
       输出严格的 JSON 格式。
+      【重要约束】每个字段控制在50字以内，不要展开描述细节。保持简洁。
     prompt_template: |
       基于以下约束，设计世界观框架：
       - 题材类型：{genre_type}
       - 核心设定：{core_setting}
       - 隐性约束：{implicit_constraints}
 
+      【输出要求】每个字符串字段严格控制在50字以内，只写核心要点，不要展开描述。
+
       输出 JSON：
       {{
         "worldview": {{
-          "world_type": "世界类型",
+          "world_type": "世界类型（10字以内）",
           "power_systems": [
             {{
               "system_name": "体系名称",
-              "core_rules": "核心规则",
-              "relationship_to_other_systems": "与其他体系的关系"
+              "core_rules": "核心规则（50字以内，只写关键机制）",
+              "relationship_to_other_systems": "与其他体系的关系（30字以内）"
             }}
           ],
-          "geography": "主要地理/势力分布概述",
-          "factions": ["主要势力1", "主要势力2", "主要势力3"],
-          "core_conflict_of_worldview": "世界观层面的核心矛盾"
+          "geography": "主要地理/势力分布概述（50字以内）",
+          "factions": ["主要势力1（15字以内）", "主要势力2", "主要势力3", "主要势力4"],
+          "core_conflict_of_worldview": "世界观层面的核心矛盾（50字以内）"
         }}
       }}
     save_as: "worldview"
@@ -119,6 +122,7 @@ nodes:
     output_file: "{output_root}/_global/01_worldview.md"
     llm:
       temperature: 0.4
+      max_tokens: 4096
 
   - id: "generate_worldview_summary"
     type: "llm_json"
@@ -132,14 +136,12 @@ nodes:
 
       世界观：{worldview}
 
-      输出 JSON：
+      输出 JSON（直接返回摘要对象，不要包裹在任何键中）：
       {{
-        "worldview_summary": {{
-          "key_rules": "核心规则摘要（3条以内）",
-          "power_systems_brief": "力量体系简述",
-          "faction_landscape": "势力格局简述",
-          "core_tension": "核心张力（一句话）"
-        }}
+        "key_rules": "核心规则摘要（3条以内）",
+        "power_systems_brief": "力量体系简述",
+        "faction_landscape": "势力格局简述",
+        "core_tension": "核心张力（一句话）"
       }}
     save_as: "worldview_summary"
     llm:
@@ -180,7 +182,7 @@ nodes:
     output_file: "{output_root}/_global/02_selling_point.md"
     llm:
       temperature: 0.5
-    next: ["generate_power_system", "generate_ending_and_turning_points"]
+    next: "generate_ending_and_turning_points"
 
   # ==================== 阶段四：力量体系 + 金手指 ====================
 
@@ -251,13 +253,11 @@ nodes:
       力量体系：{power_system}
       金手指：{golden_finger}
 
-      输出 JSON：
+      输出 JSON（直接返回摘要对象，不要包裹在任何键中）：
       {{
-        "power_system_summary": {{
-          "level_progression": "等级进阶路线（一句话）",
-          "golden_finger_core": "金手指核心能力（一句话）",
-          "golden_finger_limits": "金手指限制（3条以内）"
-        }}
+        "level_progression": "等级进阶路线（一句话）",
+        "golden_finger_core": "金手指核心能力（一句话）",
+        "golden_finger_limits": "金手指限制（3条以内）"
       }}
     save_as: "power_system_summary"
     llm:
@@ -397,13 +397,11 @@ nodes:
 
       主线矛盾：{core_conflict}
 
-      输出 JSON：
+      输出 JSON（直接返回摘要对象，不要包裹在任何键中）：
       {{
-        "core_conflict_summary": {{
-          "name": "主线矛盾名称",
-          "description": "矛盾简述（一句话）",
-          "key_escalations": "关键升级节点（列表）"
-        }}
+        "name": "主线矛盾名称",
+        "description": "矛盾简述（一句话）",
+        "key_escalations": "关键升级节点（列表）"
       }}
     save_as: "core_conflict_summary"
     llm:
@@ -423,16 +421,15 @@ nodes:
       结局：{ending}
       转折点：{core_turning_points}
 
-      输出 JSON：
+      输出 JSON（直接返回摘要对象，不要包裹在任何键中）：
       {{
-        "ending_summary": {{
-          "final_goal": "主角最终目标（一句话）",
-          "key_turning_points": "核心转折点列表（仅名称+影响，一句话每个）"
-        }}
+        "final_goal": "主角最终目标（一句话）",
+        "key_turning_points": "核心转折点列表（仅名称+影响，一句话每个）"
       }}
     save_as: "ending_summary"
     llm:
       temperature: 0.2
+    next: "generate_power_system"
 
   # ==================== 阶段九：人物设定 ====================
 
@@ -534,7 +531,7 @@ nodes:
     type: "llm_json"
     round: 5
     dependencies: ["generate_ending_and_turning_points", "generate_character_growth", "generate_core_conflict", "parse_input", "generate_ai_application_stages", "generate_power_system", "generate_worldview_summary"]
-    next: ["fan_out_volumes", "generate_pacing_plan"]
+    next: "generate_pacing_plan"
     system_prompt: |
       你是资深网络小说策划。请将小说划分为完整的卷结构。
       输出严格的 JSON 格式。
@@ -589,7 +586,7 @@ nodes:
     dependencies: ["generate_volume_outline", "generate_pacing_plan", "generate_emotion_curve", "generate_foreshadowing_plan"]
     next: "wait_volumes_complete"
     count_from: "{volumes|length}"
-    target: "generate_volume_detail"
+    target: "generate_volume_overview"
     child_flow_name: "volume_flow"
     child_context:
       volume_index: "{fanout_index}"
@@ -741,7 +738,7 @@ nodes:
     type: "llm_json"
     round: 8
     dependencies: ["generate_volume_outline", "generate_pacing_plan", "generate_emotion_curve", "parse_input"]
-    next: "generate_state_log"
+    next: "fan_out_volumes"
     system_prompt: |
       你是资深网络小说运营专家。请规划商业化节奏。
       输出严格的 JSON 格式。

@@ -55,6 +55,9 @@ class FlowEngine:
     ) -> RunRecord:
         actual_run_id = run_id or str(uuid.uuid4())
         context = dict(initial_context or {})
+        # 注入 output_root 变量
+        if "output_root" not in context:
+            context["output_root"] = f"outputs/{actual_run_id}"
         return self.store.create_run(
             run_id=actual_run_id,
             parent_run_id=parent_run_id,
@@ -172,7 +175,26 @@ class FlowEngine:
 
         handler = self.nodes.get(state.current_node)
         if handler is None:
-            raise KeyError(f"Unknown node: {state.current_node}")
+            # 尝试动态加载子流程模板
+            template_path = state.context.get("template_path")
+            if template_path and Path(template_path).exists():
+                from template import TemplateRuntime
+                from tools.writer import OutputWriter
+                from nodes import ensure_defaults_registered
+                ensure_defaults_registered()
+                config_values = load_llm_config()
+                writer = OutputWriter(root_dir="outputs")
+                runtime = TemplateRuntime.from_file(
+                    Path(template_path),
+                    engine=self,
+                    writer=writer,
+                    global_config=config_values
+                )
+                handler = self.nodes.get(state.current_node)
+                if handler is None:
+                    raise KeyError(f"Unknown node: {state.current_node} (after loading {template_path})")
+            else:
+                raise KeyError(f"Unknown node: {state.current_node}")
 
         self.store.append_event(
             run_id,
@@ -188,8 +210,17 @@ class FlowEngine:
                 del next_context["_retry_count"]
             if "_retry_until" in next_context:
                 del next_context["_retry_until"]
-                
+
             next_context.update(result.context_update)
+            
+            # 确保 event_payload 中的所有值都是 JSON 可序列化的
+            event_payload = {}
+            for k, v in result.event_payload.items():
+                if isinstance(v, (list, dict)):
+                    event_payload[k] = v  # JSON 序列化会处理
+                else:
+                    event_payload[k] = v
+            
             updated = self.store.update_run(
                 run_id,
                 current_node=result.next_node,
@@ -200,7 +231,7 @@ class FlowEngine:
                 run_id,
                 state.current_node,
                 result.event_type,
-                result.event_payload,
+                event_payload,
             )
             if updated.status in {DONE, FAILED} and updated.parent_run_id:
                 parent = self.store.get_run(updated.parent_run_id)
@@ -379,7 +410,7 @@ def get_run_db_path(run_id: str) -> Path:
 
 def build_engine_for_create(template_path: Path, run_id: str) -> tuple[FlowEngine, Any]:
     from template import TemplateRuntime
-    from nodes.writer import OutputWriter
+    from tools.writer import OutputWriter
     from nodes import ensure_defaults_registered
     ensure_defaults_registered()
 
@@ -393,7 +424,7 @@ def build_engine_for_create(template_path: Path, run_id: str) -> tuple[FlowEngin
 
 def build_engine_for_existing_run(run_id: str) -> tuple[FlowEngine, Any, RunRecord]:
     from template import TemplateRuntime
-    from nodes.writer import OutputWriter
+    from tools.writer import OutputWriter
     from nodes import ensure_defaults_registered
     ensure_defaults_registered()
 
