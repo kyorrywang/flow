@@ -1,0 +1,144 @@
+# 章纲生成子流程
+# 职责：为每个阶段生成详细的章纲
+# 输出：volumes/vol_XX_卷名/phases/phase_XX_阶段名/chapters/chapter_XX_章纲.md
+# 注意：此流程在深度上色阶段触发，章纲留到此时才生成
+
+name: "chapter_outline_flow"
+version: "2.0"
+start: "generate_chapter_outline"
+
+# 本流程使用摘要而非完整数据
+context_strategy: "使用分层摘要 + 直接父节点完整内容"
+
+# 此流程属于深度上色阶段
+flow_phase: "deep_paint"
+
+nodes:
+  # 步骤1：生成章纲
+  - id: "generate_chapter_outline"
+    type: "llm_json"
+    next: "chapter_summary"
+    system_prompt: |
+      你是资深网络小说编辑。请为当前章节生成详细的章纲。
+      章纲应包含本章的核心事件、情绪节奏、爽点设计。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      请为以下章节生成详细的章纲：
+
+      【章节信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 阶段序号：{phase_index}
+      - 阶段名：{phase_name}
+      - 章节序号：{chapter_index}
+      - 本章预估字数：{chapter_word_count}
+
+      【直接父节点（阶段）完整内容】
+      - 阶段概述：{phase_detail}
+      - 阶段事件序列：{phase_detail[event_sequence]}
+      - 阶段高潮：{phase_detail[phase_climax]}
+
+      【全局上下文（摘要层）】
+      - 世界观摘要：{worldview_summary}
+      - 力量体系摘要：{power_system_summary}
+      - 主角内核：{character_core[protagonist]}
+      - 金手指核心能力：{power_system_summary[golden_finger_core]}
+      - 金手指限制：{power_system_summary[golden_finger_limits]}
+
+      【状态追踪层】
+      - 当前伏笔清单：{state_log[dynamic_state][foreshadowing_status]}
+      - 主角当前位置：{state_log[dynamic_state][character_positions]}
+      - 时间线进度：{state_log[dynamic_state][timeline_progress]}
+      - 金手指当前状态：{state_log[dynamic_state][golden_finger_state]}
+
+      请输出 JSON：
+      {{
+        "chapter_outline": {{
+          "chapter_name": "章节名称",
+          "chapter_goal": "本章目标（一句话）",
+          "core_event": "核心事件描述",
+          "emotional_beat": "情绪节拍（压抑/紧张/释放/爽）",
+          "scene_breakdown": [
+            {{
+              "scene_index": 1,
+              "scene_name": "场景名称",
+              "scene_description": "场景描述",
+              "location": "地点",
+              "characters_involved": ["涉及角色"],
+              "conflict_or_tension": "冲突或张力",
+              "golden_finger_usage": "金手指使用（如有）",
+              "foreshadowing_planted": ["埋入的伏笔"],
+              "foreshadowing_revealed": ["回收的伏笔"],
+              "word_count_estimate": "预估字数"
+            }}
+          ],
+          "climax_moment": "本章高潮时刻",
+          "hook_for_next": "下章钩子/悬念",
+          "cool_point": "爽点设计",
+          "character_growth_in_chapter": "本章人物成长/变化",
+          "state_changes": {{
+            "protagonist_status_change": "主角状态变化",
+            "golden_finger_status_change": "金手指状态变化",
+            "world_status_change": "世界/势力状态变化"
+          }}
+        }}
+      }}
+    save_as: "chapter_outline_data"
+    extract_keys:
+      - "chapter_outline"
+    output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/phases/phase_{phase_index:02d}_{phase_name}/chapters/chapter_{chapter_index:02d}_outline.md"
+    llm:
+      temperature: 0.6
+
+  # 步骤2：生成章纲摘要（供后续正文生成使用）
+  - id: "chapter_summary"
+    type: "llm_json"
+    next: "chapter_complete"
+    system_prompt: "生成章纲摘要，供正文生成使用。输出严格 JSON。"
+    prompt_template: |
+      请基于以下章纲，生成一份精简摘要，供正文生成使用。
+
+      章纲：{chapter_outline_data}
+
+      只保留正文生成需要感知的信息。
+
+      输出 JSON：
+      {{
+        "chapter_summary": {{
+          "core_event_summary": "核心事件摘要（一句话）",
+          "emotional_arc": "情绪弧线（一句话）",
+          "key_scenes": "关键场景列表（仅名称+一句话描述）",
+          "cool_point_summary": "爽点摘要（一句话）",
+          "hook_summary": "钩子摘要（一句话）"
+        }}
+      }}
+    save_as: "chapter_summary_data"
+    llm:
+      temperature: 0.2
+
+  # 步骤3：触发正文生成（深度上色阶段）
+  - id: "trigger_chapter_content"
+    type: "sub_flow"
+    phase: "deep_paint"
+    next: "chapter_complete"
+    child_flow_name: "chapter_content_flow"
+    child_context:
+      volume_index: "{volume_index}"
+      volume_name: "{volume_name}"
+      phase_index: "{phase_index}"
+      phase_name: "{phase_name}"
+      chapter_index: "{chapter_index}"
+      chapter_word_count: "{chapter_word_count}"
+      chapter_outline_data: "{chapter_outline_data}"
+      chapter_summary_data: "{chapter_summary_data}"
+      # 传递全局上下文
+      worldview_summary: "{worldview_summary}"
+      power_system_summary: "{power_system_summary}"
+      character_core: "{character_core}"
+      golden_finger: "{golden_finger}"
+      state_log: "{state_log}"
+    save_as: "chapter_content_result"
+    on_child_failure: "warn"
+
+  - id: "chapter_complete"
+    type: "done"

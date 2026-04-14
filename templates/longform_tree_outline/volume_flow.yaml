@@ -1,0 +1,172 @@
+# 单卷生成子流程
+# 职责：为每卷生成概述文件 + 展开阶段层
+# 输出：volumes/vol_XX_卷名/volume_overview.md + phases/
+
+name: "volume_flow"
+version: "2.0"
+start: "generate_volume_overview"
+
+# 本流程使用摘要而非完整数据，确保上下文注入策略正确
+context_strategy: "使用分层摘要，避免传递全文"
+
+nodes:
+  # 步骤1：生成卷概述
+  - id: "generate_volume_overview"
+    type: "llm_json"
+    next: "fan_out_phases"
+    system_prompt: |
+      你是资深网络小说策划。请为当前卷生成详细的卷概述。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      请为以下卷生成详细的卷概述：
+
+      【卷信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 预估字数：{volume_word_count}
+      - 本卷核心矛盾：{volume_core_conflict}
+      - 本卷目标：{volume_goal}
+      - 本卷力量等级范围：{volume_power_range}
+      - 本卷金手指能力边界：{volume_golden_finger}
+      - 本卷主线：{volume_main_plot}
+      - 本卷人物成长要点：{volume_character_growth}
+      - 大场景：{volume_set_pieces}
+      - 阶段数：{volume_phase_count}
+      - 卷末悬念：{volume_cliffhanger}
+      - 与下卷衔接：{volume_connection}
+
+      【全局上下文（摘要层）】
+      - 世界观摘要：{worldview_summary}
+      - 力量体系摘要：{power_system_summary}
+      - 结局摘要：{ending_summary}
+      - 主角内核：{character_core[protagonist][name]} - {character_core[protagonist][personality_flaw]}
+      - 成长方向认知升级：{growth_direction[cognitive_upgrades]}
+      - 爽点密度标准：{pacing_plan_volume_full[cool_point_density]}
+      - 情绪曲线（请提取卷序号={volume_index}对应的条目）：{emotion_curves_full}
+      - 伏笔清单（请筛选与本卷相关的条目）：{foreshadowing_plan_full}
+      - 金手指：{golden_finger}
+
+      请输出 JSON：
+      {{
+        "volume_overview": {{
+          "synopsis": "卷内容概要（200字以内）",
+          "phase_breakdown": [
+            {{
+              "phase_index": 1,
+              "name": "阶段名称",
+              "phase_goal": "本阶段目标",
+              "word_count": "预估字数",
+              "rhythm_position": "节奏定位（铺垫/发展/小高潮/收尾）",
+              "start_state": "起始状态",
+              "end_state": "结束状态",
+              "golden_finger_available": "本阶段金手指可用功能",
+              "key_events": ["关键事件1", "关键事件2"],
+              "foreshadowing_in_this_phase": "本阶段涉及的伏笔"
+            }}
+          ],
+          "volume_arc_contribution": "本卷对主角人物弧线的贡献",
+          "power_progression": "本卷力量进阶路径",
+          "commercial_notes": "商业化备注（推荐位/爆更节点对应）"
+        }}
+      }}
+    save_as: "volume_overview_data"
+    extract_keys:
+      - "volume_overview"
+    output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/volume_overview.md"
+    llm:
+      temperature: 0.5
+
+  # 步骤2：展开阶段
+  - id: "fan_out_phases"
+    type: "fan_out"
+    next: "wait_phases_complete"
+    count_from: "{volume_overview_data[phase_breakdown]|length}"
+    target: "generate_phase_detail"
+    child_flow_name: "phase_flow"
+    child_context:
+      volume_index: "{volume_index}"
+      volume_name: "{volume_name}"
+      volume_core_conflict: "{volume_core_conflict}"
+      volume_goal: "{volume_goal}"
+      volume_golden_finger: "{volume_golden_finger}"
+      phase_index: "{fanout_index}"
+      phase_name: "{volume_overview_data[phase_breakdown][fanout_index-1][name]}"
+      phase_goal: "{volume_overview_data[phase_breakdown][fanout_index-1][phase_goal]}"
+      phase_word_count: "{volume_overview_data[phase_breakdown][fanout_index-1][word_count]}"
+      phase_rhythm: "{volume_overview_data[phase_breakdown][fanout_index-1][rhythm_position]}"
+      phase_start_state: "{volume_overview_data[phase_breakdown][fanout_index-1][start_state]}"
+      phase_end_state: "{volume_overview_data[phase_breakdown][fanout_index-1][end_state]}"
+      phase_golden_finger: "{volume_overview_data[phase_breakdown][fanout_index-1][golden_finger_available]}"
+      phase_key_events: "{volume_overview_data[phase_breakdown][fanout_index-1][key_events]}"
+      phase_foreshadowing: "{volume_overview_data[phase_breakdown][fanout_index-1][foreshadowing_in_this_phase]}"
+      # 传递全局上下文到阶段子流程
+      emotion_curves_full: "{emotion_curves_full}"
+      foreshadowing_plan_full: "{foreshadowing_plan_full}"
+      worldview_summary: "{worldview_summary}"
+      power_system_summary: "{power_system_summary}"
+      character_core: "{character_core}"
+      golden_finger: "{golden_finger}"
+      state_log: "{state_log}"
+    save_as: "phase_run_ids"
+
+  - id: "wait_phases_complete"
+    type: "wait_children"
+    next: "volume_local_review"
+    children_key: "phase_run_ids"
+    on_child_failure: "fail_parent"
+
+  # 步骤3：局部一致性审查（每卷完成后触发）
+  - id: "volume_local_review"
+    type: "llm_json"
+    next: "volume_complete"
+    system_prompt: "进行卷局部一致性审查。输出严格 JSON。"
+    prompt_template: |
+      请进行**卷局部一致性审查**，只检查当前卷与下一卷的接口：
+
+      【当前卷信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 卷概述：{volume_overview_data}
+
+      【全局上下文（摘要层）】
+      - 世界观摘要：{worldview_summary}
+      - 力量体系摘要：{power_system_summary}
+      - 主角内核：{character_core[protagonist]}
+      - 金手指：{golden_finger}
+      - 结局摘要：{ending_summary}
+
+      【状态追踪（基于本卷生成结果）】
+      - 本卷力量等级范围：{volume_power_range}
+      - 本卷金手指能力边界：{volume_golden_finger}
+      - 本卷阶段分解：{volume_overview_data[phase_breakdown]}
+
+      检查项：
+      1. 卷末状态与下一卷起始状态是否一致
+      2. 力量等级进阶是否合理
+      3. 金手指能力使用是否超出本卷边界
+      4. 人物行为是否符合主角内核
+      5. 伏笔埋入/回收是否自洽
+
+      输出 JSON：
+      {{
+        "volume_local_review": {{
+          "volume_index": {volume_index},
+          "status": "通过/警告/阻塞",
+          "interface_check": "卷间接口一致性检查结果",
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "涉及阶段/章节",
+              "suggestion": "建议修改方向"
+            }}
+          ]
+        }}
+      }}
+    save_as: "volume_local_review_result"
+    output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/local_review.md"
+    llm:
+      temperature: 0.2
+
+  - id: "volume_complete"
+    type: "done"

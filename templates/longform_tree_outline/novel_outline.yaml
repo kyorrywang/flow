@@ -1,0 +1,1168 @@
+# 长篇小说大纲生成引擎 - 分拆版
+# 核心理念：每个逻辑块独立输出文件，汇总只做组装不再生成
+# 输入示例："写一本科技修仙，金手指是AI，平台是起点，200万字以上，要爆款"
+
+name: "长篇小说大纲引擎"
+version: "2.0"
+start: "parse_input"
+
+# ==================== 输出根目录（由引擎在运行时替换为 outputs/{template_name}_{run_id}） ====================
+output_root: "{output_root}"
+
+# ==================== 模板元数据 ====================
+# 广度铺起的最大深度：3 = 铺起到阶段层为止，章纲和正文留到深度上色阶段
+spread_depth: 3
+
+# 依赖图类型：结局驱动型（大多数类型文）
+# 结局 → 人物弧线 → 伏笔 → 节奏
+dependency_graph_type: "ending_driven"
+
+# 上色轮次定义（供参考，每个节点的 round 字段对应此表）
+paint_rounds:
+  round_1: "核心卖点 + 一句话简介"
+  round_2: "力量体系 + 金手指规则（与round_1并行）"
+  round_2a: "金手指分阶段应用场景（依赖round_1 + round_2）"
+  round_3: "结局 + 核心转折点（依赖round_1）"
+  round_4a: "人物内核（依赖round_3）"
+  round_4b: "成长方向与认知升级（依赖round_2 + round_4a）"
+  round_5: "卷划分 + 每卷核心矛盾（依赖round_3 + round_4b）"
+  round_6: "爽点密度规划 + 高潮节奏（依赖round_2a + round_5）"
+  round_6a: "情绪曲线设计（依赖round_5 + round_6）"
+  round_7: "伏笔分布 + 回收计划（依赖round_3 + round_5）"
+  round_8: "商业化节奏（依赖round_5 + round_6 + round_6a）"
+  round_9: "全局一致性审查（依赖所有round）"
+
+nodes:
+  # ==================== 阶段一：输入解析层 ====================
+
+  - id: "parse_input"
+    type: "llm_json"
+    round: 0
+    dependencies: []
+    next: "generate_worldview"
+    system_prompt: |
+      你是资深网络小说策划编辑。请将用户的模糊需求拆解为结构化约束。
+      输出严格的 JSON 格式，不要包含任何其他文本。
+    prompt_template: |
+      请将以下小说创意拆解为结构化约束：
+
+      用户输入：{user_input}
+
+      请按照以下 JSON 结构输出：
+      {{
+        "genre_type": "题材类型（如：科技修仙、都市修仙、玄幻、科幻等）",
+        "core_setting": "核心设定（金手指类型、特殊能力、世界观关键词）",
+        "power_evolution": {{
+          "early_stage": "初期能力边界与应用场景",
+          "mid_stage": "中期能力边界与应用场景",
+          "late_stage": "后期能力边界与应用场景"
+        }},
+        "platform": "发布平台（起点、番茄等）",
+        "word_count_target": "篇幅目标（如：200万字+）",
+        "commercial_positioning": "商业定位（爆款、精品化等）",
+        "protagonist_growth": [
+          "主角不可替代成长线1",
+          "主角不可替代成长线2",
+          "主角不可替代成长线3"
+        ],
+        "implicit_constraints": "从用户输入中推断的隐性约束"
+      }}
+    save_as: "parsed_constraints"
+    extract_keys:
+      - "genre_type"
+      - "core_setting"
+      - "power_evolution"
+      - "platform"
+      - "word_count_target"
+      - "commercial_positioning"
+      - "protagonist_growth"
+      - "implicit_constraints"
+    output_file: "{output_root}/_global/00_input_analysis.md"
+    llm:
+      temperature: 0.3
+
+  # ==================== 阶段二：世界观层 ====================
+
+  - id: "generate_worldview"
+    type: "llm_json"
+    round: 2
+    dependencies: ["parse_input"]
+    next: "generate_worldview_summary"
+    system_prompt: |
+      你是资深网络小说世界观架构师。请设计世界观框架。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下约束，设计世界观框架：
+      - 题材类型：{genre_type}
+      - 核心设定：{core_setting}
+      - 隐性约束：{implicit_constraints}
+
+      输出 JSON：
+      {{
+        "worldview": {{
+          "world_type": "世界类型",
+          "power_systems": [
+            {{
+              "system_name": "体系名称",
+              "core_rules": "核心规则",
+              "relationship_to_other_systems": "与其他体系的关系"
+            }}
+          ],
+          "geography": "主要地理/势力分布概述",
+          "factions": ["主要势力1", "主要势力2", "主要势力3"],
+          "core_conflict_of_worldview": "世界观层面的核心矛盾"
+        }}
+      }}
+    save_as: "worldview"
+    extract_keys:
+      - "worldview"
+    output_file: "{output_root}/_global/01_worldview.md"
+    llm:
+      temperature: 0.4
+
+  - id: "generate_worldview_summary"
+    type: "llm_json"
+    round: 2
+    dependencies: ["generate_worldview"]
+    next: "generate_core_selling_point"
+    system_prompt: "生成面向子节点的世界观摘要。输出严格 JSON。"
+    prompt_template: |
+      请基于以下世界观，生成一份精简摘要，供后续节点使用。
+      只保留子节点需要感知的信息。
+
+      世界观：{worldview}
+
+      输出 JSON：
+      {{
+        "worldview_summary": {{
+          "key_rules": "核心规则摘要（3条以内）",
+          "power_systems_brief": "力量体系简述",
+          "faction_landscape": "势力格局简述",
+          "core_tension": "核心张力（一句话）"
+        }}
+      }}
+    save_as: "worldview_summary"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段三：核心卖点 ====================
+
+  - id: "generate_core_selling_point"
+    type: "llm_json"
+    round: 1
+    dependencies: ["parse_input"]
+    next: "generate_power_system"
+    system_prompt: |
+      你是资深网络小说策划。请规划核心卖点。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下约束，规划核心卖点：
+      - 题材类型：{genre_type}
+      - 核心设定：{core_setting}
+      - 商业定位：{commercial_positioning}
+      - 发布平台：{platform}
+
+      输出 JSON：
+      {{
+        "one_sentence_intro": "一句话简介（20字以内）",
+        "core_selling_points": ["卖点1", "卖点2", "卖点3"],
+        "target_audience": "目标读者群体",
+        "emotional_hook": "情绪钩子",
+        "book_positioning": "市场定位（对标作品）"
+      }}
+    save_as: "core_selling_point"
+    extract_keys:
+      - "one_sentence_intro"
+      - "core_selling_points"
+      - "target_audience"
+      - "emotional_hook"
+      - "book_positioning"
+    output_file: "{output_root}/_global/02_selling_point.md"
+    llm:
+      temperature: 0.5
+    next: ["generate_power_system", "generate_ending_and_turning_points"]
+
+  # ==================== 阶段四：力量体系 + 金手指 ====================
+
+  - id: "generate_power_system"
+    type: "llm_json"
+    round: 2
+    dependencies: ["parse_input", "generate_worldview"]
+    next: "generate_power_system_summary"
+    system_prompt: |
+      你是资深网络小说世界观架构师。请设计力量体系和金手指规则。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计完整的力量体系和金手指规则：
+      - 题材类型：{genre_type}
+      - 核心设定：{core_setting}
+      - 金手指演进路线：
+        - 初期：{power_evolution[early_stage]}
+        - 中期：{power_evolution[mid_stage]}
+        - 后期：{power_evolution[late_stage]}
+      - 世界观：{worldview}
+
+      输出 JSON：
+      {{
+        "power_system": {{
+          "name": "力量体系名称",
+          "levels": ["等级1", "等级2", "等级3", "等级4", "等级5", "等级6", "等级7", "等级8", "等级9"],
+          "level_descriptions": {{
+            "level_1": "等级1描述",
+            "level_3": "等级3描述",
+            "level_6": "等级6描述",
+            "level_9": "等级9描述"
+          }},
+          "breakthrough_mechanism": "突破方式",
+          "description": "体系说明"
+        }},
+        "golden_finger": {{
+          "name": "金手指名称",
+          "origin": "金手指来源",
+          "initial_abilities": "初期能力描述",
+          "upgrade_path": "升级路径",
+          "upgrade_conditions": "升级条件",
+          "limitations": ["限制1", "限制2", "限制3"],
+          "cost_or_risk": "使用代价或风险",
+          "ai_specific": {{
+            "computing_limit": "算力限制",
+            "data_dependency": "数据依赖性",
+            "algorithm_evolution": "算法演进路线"
+          }}
+        }}
+      }}
+    save_as: "power_system"
+    extract_keys:
+      - "power_system"
+      - "golden_finger"
+    output_file: "{output_root}/_global/03_power_system.md"
+    llm:
+      temperature: 0.4
+
+  - id: "generate_power_system_summary"
+    type: "llm_json"
+    round: 2
+    dependencies: ["generate_power_system"]
+    next: "generate_ai_application_stages"
+    system_prompt: "生成力量体系摘要。输出严格 JSON。"
+    prompt_template: |
+      请基于以下力量体系和金手指，生成精简摘要。
+
+      力量体系：{power_system}
+      金手指：{golden_finger}
+
+      输出 JSON：
+      {{
+        "power_system_summary": {{
+          "level_progression": "等级进阶路线（一句话）",
+          "golden_finger_core": "金手指核心能力（一句话）",
+          "golden_finger_limits": "金手指限制（3条以内）"
+        }}
+      }}
+    save_as: "power_system_summary"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段五：金手指应用场景 ====================
+
+  - id: "generate_ai_application_stages"
+    type: "llm_json"
+    round: 2a
+    dependencies: ["generate_core_selling_point", "generate_power_system"]
+    next: "generate_core_conflict"
+    system_prompt: |
+      你是资深网络小说策划。请规划金手指分阶段应用场景。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，规划金手指分阶段应用场景：
+      - 核心卖点：{core_selling_points}
+      - 金手指：{golden_finger}
+      - 限制条件：{golden_finger[limitations]}
+      - 使用代价：{golden_finger[cost_or_risk]}
+
+      输出 JSON：
+      {{
+        "ai_application_stages": [
+          {{
+            "stage_name": "阶段名称",
+            "problem_type": "AI解决的具体问题类型",
+            "ability_display": "能力展示方式",
+            "cool_factor": "爽点等级（1-5）",
+            "limitation_demonstrated": "本阶段展现的限制/代价"
+          }}
+        ]
+      }}
+    save_as: "ai_application_stages"
+    output_file: "{output_root}/_global/03b_ai_applications.md"
+    llm:
+      temperature: 0.4
+
+  # ==================== 阶段六：结局 + 转折点（结局优先，round_3锁定） ====================
+
+  - id: "generate_ending_and_turning_points"
+    type: "llm_json"
+    round: 3
+    dependencies: ["generate_core_selling_point", "parse_input"]
+    next: "generate_ending_summary"
+    system_prompt: |
+      你是资深网络小说策划。请设计结局和核心转折点。
+      结局先行。输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计结局和核心转折点：
+      - 一句话简介：{one_sentence_intro}
+      - 核心卖点：{core_selling_points}
+      - 题材类型：{genre_type}
+      - 篇幅目标：{word_count_target}
+      - 金手指演进：
+        - 初期：{power_evolution[early_stage]}
+        - 后期：{power_evolution[late_stage]}
+
+      输出 JSON：
+      {{
+        "ending": {{
+          "final_state": "最终状态描述",
+          "power_level_at_end": "主角最终力量等级",
+          "golden_finger_final_form": "金手指最终形态",
+          "emotional_resolution": "情绪结局",
+          "open_or_closed": "开放式/封闭式",
+          "sequel_hook": "续作钩子"
+        }},
+        "core_turning_points": [
+          {{
+            "name": "转折点名称",
+            "volume_range": "发生在哪几卷",
+            "description": "描述",
+            "impact": "对主线的影响",
+            "irreversibility": "不可逆性"
+          }}
+        ]
+      }}
+    save_as: "ending_and_turning_points"
+    extract_keys:
+      - "ending"
+      - "core_turning_points"
+    output_file: "{output_root}/_global/05_ending.md"
+    llm:
+      temperature: 0.5
+
+  # ==================== 阶段七：主线矛盾（依赖结局） ====================
+
+  - id: "generate_core_conflict"
+    type: "llm_json"
+    round: 3
+    dependencies: ["generate_ending_and_turning_points", "generate_worldview", "generate_power_system", "parse_input"]
+    next: "generate_core_conflict_summary"
+    system_prompt: |
+      你是资深网络小说策划。请设计贯穿全书的主线矛盾。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计主线矛盾：
+      - 结局：{ending[final_state]}
+      - 核心转折点：{core_turning_points}
+      - 世界观核心矛盾：{worldview[core_conflict_of_worldview]}
+      - 金手指：{golden_finger[name]}
+      - 篇幅目标：{word_count_target}
+
+      输出 JSON：
+      {{
+        "core_conflict": {{
+          "name": "主线矛盾名称",
+          "description": "矛盾描述",
+          "antagonist_force": "对抗力量",
+          "escalation_path": [
+            {{
+              "stage": "阶段名称",
+              "conflict_manifestation": "矛盾的具体表现",
+              "stakes": "赌注/风险"
+            }}
+          ],
+          "resolution_connection": "与结局的关联"
+        }}
+      }}
+    save_as: "core_conflict"
+    extract_keys:
+      - "core_conflict"
+    output_file: "{output_root}/_global/04_core_conflict.md"
+    llm:
+      temperature: 0.5
+
+  - id: "generate_core_conflict_summary"
+    type: "llm_json"
+    round: 3
+    dependencies: ["generate_core_conflict"]
+    next: "generate_character_core"
+    system_prompt: "生成主线矛盾摘要。输出严格 JSON。"
+    prompt_template: |
+      请基于主线矛盾，生成精简摘要。
+
+      主线矛盾：{core_conflict}
+
+      输出 JSON：
+      {{
+        "core_conflict_summary": {{
+          "name": "主线矛盾名称",
+          "description": "矛盾简述（一句话）",
+          "key_escalations": "关键升级节点（列表）"
+        }}
+      }}
+    save_as: "core_conflict_summary"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段八：结局摘要 ====================
+
+  - id: "generate_ending_summary"
+    type: "llm_json"
+    round: 3
+    dependencies: ["generate_ending_and_turning_points"]
+    next: "generate_character_core"
+    system_prompt: "生成结局摘要。输出严格 JSON。"
+    prompt_template: |
+      请基于结局和转折点，生成精简摘要。
+
+      结局：{ending}
+      转折点：{core_turning_points}
+
+      输出 JSON：
+      {{
+        "ending_summary": {{
+          "final_goal": "主角最终目标（一句话）",
+          "key_turning_points": "核心转折点列表（仅名称+影响，一句话每个）"
+        }}
+      }}
+    save_as: "ending_summary"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段九：人物设定 ====================
+
+  - id: "generate_character_core"
+    type: "llm_json"
+    round: 4a
+    dependencies: ["generate_ending_and_turning_points", "generate_core_selling_point", "generate_core_conflict", "parse_input", "generate_power_system"]
+    next: "generate_character_growth"
+    system_prompt: |
+      你是资深人物设计师。请锁定主角内在驱动力。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计主角人物内核：
+      - 题材类型：{genre_type}
+      - 核心卖点：{core_selling_points}
+      - 结局：{ending[final_state]}
+      - 主角不可替代成长线：{protagonist_growth}
+      - 金手指：{golden_finger[name]}
+
+      输出 JSON：
+      {{
+        "protagonist": {{
+          "name": "主角姓名",
+          "background": "出身背景",
+          "personality_flaw": "性格缺陷",
+          "core_desire": "核心欲望",
+          "bottom_line": "底线",
+          "motivation_source": "驱动力来源",
+          "irreplaceable_growth_lines": {protagonist_growth},
+          "character_arc_summary": "人物弧线概要"
+        }},
+        "key_supporting_characters": [
+          {{
+            "name": "角色名",
+            "role": "角色定位",
+            "relationship_to_protagonist": "与主角的关系",
+            "character_arc": "角色弧线"
+          }}
+        ]
+      }}
+    save_as: "character_core"
+    extract_keys:
+      - "protagonist"
+      - "key_supporting_characters"
+    output_file: "{output_root}/_global/06_characters.md"
+    llm:
+      temperature: 0.4
+
+  # ==================== 阶段九：成长方向 ====================
+
+  - id: "generate_character_growth"
+    type: "llm_json"
+    round: 4b
+    dependencies: ["generate_character_core", "generate_power_system", "generate_ending_and_turning_points", "parse_input"]
+    next: "generate_volume_outline"
+    system_prompt: |
+      你是资深人物设计师。请明确主角认知质变。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计主角成长方向：
+      - 性格缺陷：{protagonist[personality_flaw]}
+      - 核心欲望：{protagonist[core_desire]}
+      - 人物弧线：{protagonist[character_arc_summary]}
+      - 力量体系：{power_system[name]}
+      - 金手指演进：{power_evolution}
+      - 核心转折点：{core_turning_points}
+
+      输出 JSON：
+      {{
+        "growth_direction": {{
+          "cognitive_upgrades": [
+            {{
+              "stage": "阶段名称",
+              "old_belief": "旧认知",
+              "new_belief": "新认知",
+              "trigger_event": "触发事件",
+              "power_milestone": "力量等级里程碑"
+            }}
+          ],
+          "skill_progression": [
+            {{
+              "skill_name": "技能名称",
+              "progression_stages": "进阶阶段",
+              "milestone_volumes": "关键突破卷号"
+            }}
+          ]
+        }}
+      }}
+    save_as: "character_growth"
+    extract_keys:
+      - "growth_direction"
+    output_file: "{output_root}/_global/07_growth.md"
+    llm:
+      temperature: 0.5
+
+  # ==================== 阶段十：卷划分 ====================
+
+  - id: "generate_volume_outline"
+    type: "llm_json"
+    round: 5
+    dependencies: ["generate_ending_and_turning_points", "generate_character_growth", "generate_core_conflict", "parse_input", "generate_ai_application_stages", "generate_power_system", "generate_worldview_summary"]
+    next: ["fan_out_volumes", "generate_pacing_plan"]
+    system_prompt: |
+      你是资深网络小说策划。请将小说划分为完整的卷结构。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，划分卷结构：
+      - 篇幅目标：{word_count_target}
+      - 结局：{ending}
+      - 主线矛盾：{core_conflict}
+      - 核心转折点：{core_turning_points}
+      - 主角成长方向：{growth_direction[cognitive_upgrades]}
+      - 金手指应用场景：{ai_application_stages}
+      - 力量体系等级：{power_system[levels]}
+      - 世界观摘要：{worldview_summary}
+
+      要求：
+      1. 200万字对应8-12卷
+      2. 每卷有明确的"本卷目标"和"核心矛盾"
+      3. 主线矛盾在每卷中逐步升级
+      4. 卷末必须有悬念或转折
+
+      输出 JSON：
+      {{
+        "volumes": [
+          {{
+            "volume_index": 1,
+            "name": "卷名",
+            "word_count": "预估字数",
+            "core_conflict": "本卷核心矛盾",
+            "volume_goal": "本卷目标",
+            "power_level_range": "本卷力量等级范围",
+            "golden_finger_capability": "本卷金手指能力边界",
+            "main_plot_thread": "本卷主线（与主线矛盾的关联）",
+            "character_growth_in_volume": "本卷人物成长要点",
+            "major_set_pieces": ["大场景1", "大场景2"],
+            "phase_count": "本卷阶段数（3-5个）",
+            "cliffhanger": "卷末悬念",
+            "connection_to_next_volume": "与下卷的衔接"
+          }}
+        ]
+      }}
+    save_as: "volume_outline"
+    extract_keys:
+      - "volumes"
+    output_file: "{output_root}/_global/08_volume_overview.md"
+    llm:
+      temperature: 0.5
+
+  # ==================== 阶段十一：展开卷层（等待全局规划完成后展开） ====================
+
+  - id: "fan_out_volumes"
+    type: "fan_out"
+    dependencies: ["generate_volume_outline", "generate_pacing_plan", "generate_emotion_curve", "generate_foreshadowing_plan"]
+    next: "wait_volumes_complete"
+    count_from: "{volumes|length}"
+    target: "generate_volume_detail"
+    child_flow_name: "volume_flow"
+    child_context:
+      volume_index: "{fanout_index}"
+      volume_name: "{volumes[fanout_index-1][name]}"
+      volume_core_conflict: "{volumes[fanout_index-1][core_conflict]}"
+      volume_goal: "{volumes[fanout_index-1][volume_goal]}"
+      volume_word_count: "{volumes[fanout_index-1][word_count]}"
+      volume_power_range: "{volumes[fanout_index-1][power_level_range]}"
+      volume_golden_finger: "{volumes[fanout_index-1][golden_finger_capability]}"
+      volume_main_plot: "{volumes[fanout_index-1][main_plot_thread]}"
+      volume_character_growth: "{volumes[fanout_index-1][character_growth_in_volume]}"
+      volume_set_pieces: "{volumes[fanout_index-1][major_set_pieces]}"
+      volume_phase_count: "{volumes[fanout_index-1][phase_count]}"
+      volume_cliffhanger: "{volumes[fanout_index-1][cliffhanger]}"
+      volume_connection: "{volumes[fanout_index-1][connection_to_next_volume]}"
+      # 引擎负责传递的全局上下文（完整传递，子流程自行过滤）
+      emotion_curves_full: "{emotion_curves}"
+      foreshadowing_plan_full: "{foreshadowing_plan}"
+      pacing_plan_volume_full: "{pacing_plan}"
+      # 全局摘要和设定（子流程必须感知）
+      worldview_summary: "{worldview_summary}"
+      power_system_summary: "{power_system_summary}"
+      ending_summary: "{ending_summary}"
+      character_core: "{character_core}"
+      growth_direction: "{growth_direction}"
+      golden_finger: "{golden_finger}"
+      state_log: "{state_log}"
+    save_as: "volume_run_ids"
+
+  - id: "wait_volumes_complete"
+    type: "wait_children"
+    next: "generate_state_log"
+    children_key: "volume_run_ids"
+    on_child_failure: "fail_parent"
+
+  # ==================== 阶段十二：爽点密度 + 情绪曲线（卷划分后即可规划） ====================
+
+  - id: "generate_pacing_plan"
+    type: "llm_json"
+    round: 6
+    dependencies: ["generate_core_selling_point", "generate_ai_application_stages", "generate_volume_outline", "parse_input"]
+    next: "generate_emotion_curve"
+    system_prompt: |
+      你是资深网络小说节奏大师。请规划爽点密度。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，规划爽点密度：
+      - 核心卖点：{core_selling_points}
+      - 金手指应用场景：{ai_application_stages}
+      - 卷划分：{volumes}
+      - 商业定位：{commercial_positioning}
+      - 发布平台：{platform}
+
+      输出 JSON：
+      {{
+        "pacing_plan": {{
+          "cool_point_density": "爽点密度标准",
+          "rhythm_pattern": "节奏模式",
+          "volume_climax_positions": [
+            {{
+              "volume_index": 1,
+              "climax_chapter_range": "高潮章节范围",
+              "climax_type": "高潮类型",
+              "climax_description": "爽点描述"
+            }}
+          ]
+        }}
+      }}
+    save_as: "pacing_plan"
+    output_file: "{output_root}/_global/09_pacing.md"
+    llm:
+      temperature: 0.4
+
+  - id: "generate_emotion_curve"
+    type: "llm_json"
+    round: 6a
+    dependencies: ["generate_volume_outline", "generate_pacing_plan", "generate_ai_application_stages"]
+    next: "generate_foreshadowing_plan"
+    system_prompt: |
+      你是资深网络小说策划。请设计情绪曲线。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，设计情绪曲线：
+      - 卷划分：{volumes}
+      - 爽点密度：{pacing_plan}
+      - 金手指应用场景：{ai_application_stages}
+      - 主线矛盾：{core_conflict}
+
+      输出 JSON：
+      {{
+        "emotion_curves": [
+          {{
+            "volume_index": 1,
+            "volume_emotion_theme": "本卷情绪主题",
+            "cycles": [
+              {{
+                "suppress_phase": "压抑阶段",
+                "explode_phase": "爆发阶段",
+                "harvest_phase": "收获阶段",
+                "golden_finger_moment": "金手指惊艳时刻"
+              }}
+            ]
+          }}
+        ]
+      }}
+    save_as: "emotion_curves"
+    output_file: "{output_root}/_global/09b_emotion_curves.md"
+    llm:
+      temperature: 0.5
+
+  # ==================== 阶段十三：伏笔分布 ====================
+
+  - id: "generate_foreshadowing_plan"
+    type: "llm_json"
+    round: 7
+    dependencies: ["generate_ending_and_turning_points", "generate_volume_outline", "generate_core_conflict"]
+    next: "generate_commercial_rhythm"
+    system_prompt: |
+      你是资深网络小说策划。请设计伏笔分布和回收计划。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，规划伏笔：
+      - 结局：{ending}
+      - 核心转折点：{core_turning_points}
+      - 卷划分：{volumes}
+      - 主线矛盾：{core_conflict}
+
+      输出 JSON：
+      {{
+        "foreshadowing_plan": [
+          {{
+            "name": "伏笔名称",
+            "plant_volume": "埋入卷号",
+            "reveal_volume": "回收卷号",
+            "description": "伏笔描述",
+            "importance": "重要程度（核心/次要/氛围）",
+            "connection_to_ending": "与结局的关联"
+          }}
+        ]
+      }}
+    save_as: "foreshadowing_plan"
+    output_file: "{output_root}/_global/10_foreshadowing.md"
+    llm:
+      temperature: 0.6
+
+  # ==================== 阶段十四：商业化节奏 ====================
+
+  - id: "generate_commercial_rhythm"
+    type: "llm_json"
+    round: 8
+    dependencies: ["generate_volume_outline", "generate_pacing_plan", "generate_emotion_curve", "parse_input"]
+    next: "generate_state_log"
+    system_prompt: |
+      你是资深网络小说运营专家。请规划商业化节奏。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      基于以下信息，规划商业化节奏：
+      - 发布平台：{platform}
+      - 商业定位：{commercial_positioning}
+      - 卷划分：{volumes}
+      - 爽点密度：{pacing_plan}
+      - 情绪曲线：{emotion_curves}
+
+      输出 JSON：
+      {{
+        "commercial_rhythm": {{
+          "free_chapters": "免费章节数",
+          "premium_start_volume": "上架卷号",
+          "premium_start_chapter": "上架章节",
+          "explosion_points": [
+            {{
+              "name": "爆更节点",
+              "volume_index": "对应卷号",
+              "reason": "爆更原因"
+            }}
+          ],
+          "recommendation_positions": [
+            {{
+              "recommendation_name": "推荐位",
+              "volume_index": "对应卷号",
+              "required_performance": "需要表现"
+            }}
+          ],
+          "climax_for_premium": "上架前大高潮位置",
+          "long_term_strategy": "长期运营策略"
+        }}
+      }}
+    save_as: "commercial_rhythm"
+    output_file: "{output_root}/_global/11_commercial.md"
+    llm:
+      temperature: 0.4
+
+  # ==================== 阶段十四点五：状态追踪层初始化 ====================
+
+  - id: "generate_state_log"
+    type: "llm_json"
+    round: 8
+    dependencies: ["wait_volumes_complete", "generate_commercial_rhythm", "generate_worldview", "generate_power_system", "generate_character_core", "generate_ending_and_turning_points"]
+    next: "review_worldview_consistency"
+    system_prompt: "初始化状态追踪日志。输出严格 JSON。"
+    prompt_template: |
+      请基于以下所有信息，初始化状态追踪日志。
+      状态追踪采用追加方式，每条记录携带来源节点ID。
+
+      【静态设定】
+      - 世界观：{worldview}
+      - 力量体系：{power_system}
+      - 金手指：{golden_finger}
+      - 主角：{character_core[protagonist]}
+      - 结局：{ending}
+      - 核心转折点：{core_turning_points}
+
+      【动态进度状态（初始）】
+      - 伏笔清单：{foreshadowing_plan}
+      - 爽点密度：{pacing_plan}
+      - 情绪曲线：{emotion_curves}
+      - 商业化节奏：{commercial_rhythm}
+      - 卷划分：{volumes}
+
+      输出 JSON：
+      {{
+        "state_log": {{
+          "version": 1,
+          "static_settings": {{
+            "worldview_summary": "世界观摘要（一句话）",
+            "power_system_summary": "力量体系摘要（一句话）",
+            "golden_finger_evolution": "金手指演进路线（初期/中期/后期）",
+            "protagonist_core": "主角内核（性格缺陷+核心欲望+底线）",
+            "ending_anchor": "结局锚点（一句话）",
+            "turning_points": ["核心转折点列表"]
+          }},
+          "dynamic_state": {{
+            "foreshadowing_status": [
+              {{
+                "name": "伏笔名称",
+                "status": "已埋入/已回收/未回收",
+                "planted_at": "埋入卷号",
+                "reveal_at": "回收卷号（如有）",
+                "source_node": "generate_foreshadowing_plan"
+              }}
+            ],
+            "character_positions": {{
+              "protagonist_current_volume": 1,
+              "protagonist_power_level": "当前力量等级",
+              "protagonist_emotional_state": "当前情绪状态"
+            }},
+            "timeline_progress": {{
+              "current_volume": 1,
+              "current_phase": 1,
+              "elapsed_chapters": 0
+            }},
+            "golden_finger_state": {{
+              "current_version": "初期/中期/后期",
+              "cooldown_status": "冷却状态",
+              "limitations_active": ["当前生效的限制"]
+            }}
+          }},
+          "change_log": [
+            {{
+              "timestamp": "初始化",
+              "source_node": "generate_state_log",
+              "change_type": "init",
+              "description": "状态追踪日志初始化"
+            }}
+          ]
+        }}
+      }}
+    save_as: "state_log"
+    extract_keys:
+      - "state_log"
+    output_file: "{output_root}/_global/state_log.json"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段十五：分层一致性审查 ====================
+
+  - id: "review_worldview_consistency"
+    type: "llm_json"
+    round: 9
+    dependencies: ["generate_worldview", "generate_power_system", "generate_ai_application_stages", "generate_volume_outline"]
+    next: "review_character_consistency"
+    system_prompt: "进行世界观一致性审查。输出严格 JSON。"
+    prompt_template: |
+      请进行**世界观一致性**审查：
+      - 世界观：{worldview}
+      - 力量体系：{power_system}
+      - 金手指：{golden_finger}
+      - 金手指应用场景：{ai_application_stages}
+      - 卷划分：{volumes}
+
+      检查：力量体系自洽性、金手指是否越界、等级progression合理性、限制代价是否体现。
+
+      输出 JSON：
+      {{
+        "worldview_review": {{
+          "status": "通过/警告/阻塞",
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "涉及节点",
+              "suggestion": "建议修改方向"
+            }}
+          ]
+        }}
+      }}
+    save_as: "worldview_review"
+    llm:
+      temperature: 0.2
+
+  - id: "review_character_consistency"
+    type: "llm_json"
+    round: 9
+    dependencies: ["generate_character_core", "generate_character_growth", "generate_ending_and_turning_points", "generate_volume_outline"]
+    next: "review_plot_logic"
+    system_prompt: "进行人物一致性审查。输出严格 JSON。"
+    prompt_template: |
+      请进行**人物一致性**审查：
+      - 人物内核：{character_core}
+      - 成长方向：{character_growth}
+      - 结局：{ending}
+      - 卷划分：{volumes}
+
+      检查：性格行为一致性、成长弧线合理性、不可替代成长线体现、配角关系自洽。
+
+      输出 JSON：
+      {{
+        "character_review": {{
+          "status": "通过/警告/阻塞",
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "涉及节点",
+              "suggestion": "建议修改方向"
+            }}
+          ]
+        }}
+      }}
+    save_as: "character_review"
+    llm:
+      temperature: 0.2
+
+  - id: "review_plot_logic"
+    type: "llm_json"
+    round: 9
+    dependencies: ["generate_core_conflict", "generate_ending_and_turning_points", "generate_volume_outline", "generate_foreshadowing_plan"]
+    next: "review_golden_finger"
+    system_prompt: "进行剧情逻辑一致性审查。输出严格 JSON。"
+    prompt_template: |
+      请进行**剧情逻辑一致性**审查：
+      - 主线矛盾：{core_conflict}
+      - 结局：{ending}
+      - 核心转折点：{core_turning_points}
+      - 卷划分：{volumes}
+      - 伏笔分布：{foreshadowing_plan}
+
+      检查：主线矛盾贯穿性、转折点合理性、伏笔有埋有收、卷间衔接自然度。
+
+      输出 JSON：
+      {{
+        "plot_review": {{
+          "status": "通过/警告/阻塞",
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "涉及节点",
+              "suggestion": "建议修改方向"
+            }}
+          ]
+        }}
+      }}
+    save_as: "plot_review"
+    llm:
+      temperature: 0.2
+
+  - id: "review_golden_finger"
+    type: "llm_json"
+    round: 9
+    dependencies: ["generate_power_system", "generate_ai_application_stages", "generate_pacing_plan", "generate_emotion_curve"]
+    next: "aggregate_review"
+    system_prompt: "进行金手指合理性审查。输出严格 JSON。"
+    prompt_template: |
+      请进行**金手指合理性**审查：
+      - 金手指：{golden_finger}
+      - 金手指应用场景：{ai_application_stages}
+      - 力量体系：{power_system}
+      - 爽点密度：{pacing_plan}
+      - 情绪曲线：{emotion_curves}
+
+      检查：AI能力越界、使用代价感、工具人化风险、爽点释放节奏。
+
+      输出 JSON：
+      {{
+        "golden_finger_review": {{
+          "status": "通过/警告/阻塞",
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "涉及节点",
+              "suggestion": "建议修改方向"
+            }}
+          ]
+        }}
+      }}
+    save_as: "golden_finger_review"
+    llm:
+      temperature: 0.2
+
+  - id: "aggregate_review"
+    type: "llm_json"
+    round: 9
+    dependencies: ["review_worldview_consistency", "review_character_consistency", "review_plot_logic", "review_golden_finger"]
+    next: "manual_review_gate"
+    system_prompt: "汇总四个子审查结果。输出严格 JSON。"
+    prompt_template: |
+      请汇总审查报告，做最终裁定：
+      - 世界观审查：{worldview_review}
+      - 人物审查：{character_review}
+      - 剧情审查：{plot_review}
+      - 金手指审查：{golden_finger_review}
+
+      输出 JSON：
+      {{
+        "final_review_report": {{
+          "overall_status": "通过/警告/阻塞",
+          "summary": "整体评价",
+          "critical_issues": ["阻塞性问题"],
+          "warnings": ["警告性问题"],
+          "suggestions": ["建议性优化"],
+          "recommendation": "建议"
+        }}
+      }}
+    save_as: "final_review_report"
+    output_file: "{output_root}/review_report.md"
+    llm:
+      temperature: 0.2
+
+  - id: "manual_review_gate"
+    type: "wait_input"
+    round: 9
+    dependencies: ["aggregate_review"]
+    on_approved: "generate_index"
+    on_ignored: "generate_index"
+    on_modified: "incremental_regeneration"
+    message: |
+      【全局一致性审查完成】
+
+      审查结果：{final_review_report}
+
+      操作选项：
+      1. 输入 "approved" → 接受建议并生成索引文件
+      2. 输入修改建议 → 系统将标记脏节点并增量重生成
+      3. 输入 "ignore" → 忽略警告并继续
+
+    # 脏节点标记规则（供引擎使用）
+    dirty_node_rules:
+      worldview_issues:
+        affected_nodes: ["generate_worldview", "generate_power_system"]
+        downstream_nodes: ["generate_volume_outline", "generate_ai_application_stages"]
+      character_issues:
+        affected_nodes: ["generate_character_core", "generate_character_growth"]
+        downstream_nodes: ["generate_volume_outline"]
+      plot_issues:
+        affected_nodes: ["generate_core_conflict", "generate_ending_and_turning_points", "generate_foreshadowing_plan"]
+        downstream_nodes: ["generate_volume_outline", "generate_pacing_plan"]
+      golden_finger_issues:
+        affected_nodes: ["generate_power_system", "generate_ai_application_stages"]
+        downstream_nodes: ["generate_pacing_plan", "generate_emotion_curve"]
+
+  # ==================== 阶段十六点五：增量重生成 ====================
+
+  - id: "incremental_regeneration"
+    type: "llm_json"
+    round: 9
+    dependencies: ["manual_review_gate"]
+    next: "update_state_log"
+    system_prompt: "根据用户修改，重新生成受影响的节点。输出严格 JSON。"
+    prompt_template: |
+      用户已修改审查建议。请根据以下信息重新生成受影响的节点：
+
+      【修改范围】
+      - 脏节点：{dirty_nodes}
+      - 下游节点：{downstream_nodes}
+      - 修改内容：{user_modifications}
+
+      请重新生成受影响的内容，确保与未修改节点保持一致。
+
+      输出 JSON：
+      {{
+        "regenerated_nodes": {{
+          "node_id": "重新生成的内容"
+        }},
+        "impact_analysis": "影响范围分析",
+        "consistency_check": "与未修改节点的一致性检查"
+      }}
+    save_as: "regenerated_content"
+    llm:
+      temperature: 0.5
+
+  - id: "update_state_log"
+    type: "llm_json"
+    round: 9
+    dependencies: ["incremental_regeneration", "generate_state_log"]
+    next: "generate_index"
+    system_prompt: "更新状态追踪日志（追加模式）。输出严格 JSON。"
+    prompt_template: |
+      请更新状态追踪日志，追加以下变更记录：
+
+      【当前状态】
+      - 状态日志：{state_log}
+      - 重生内容：{regenerated_content}
+
+      请追加变更记录，不要覆盖现有日志。
+
+      输出 JSON：
+      {{
+        "state_log_update": {{
+          "version": "{state_log[version]} + 1",
+          "change_log_append": [
+            {{
+              "timestamp": "增量重生成",
+              "source_node": "incremental_regeneration",
+              "change_type": "regeneration",
+              "dirty_nodes": "被标记的脏节点列表",
+              "description": "增量重生成原因"
+            }}
+          ]
+        }}
+      }}
+    save_as: "updated_state_log"
+    output_file: "{output_root}/_global/state_log.json"
+    llm:
+      temperature: 0.2
+
+  # ==================== 阶段十七：生成汇总索引 ====================
+
+  - id: "generate_index"
+    type: "llm"
+    dependencies: ["manual_review_gate"]
+    next: "done_node"
+    system_prompt: |
+      你是文件管理员。请生成一份汇总索引文件。
+      只列出文件结构和链接，不重复任何内容。
+    prompt_template: |
+      请生成一份汇总索引文件（Markdown格式），列出所有已生成的文件。
+
+      文件结构：
+      - _global/00_input_analysis.md
+      - _global/01_worldview.md
+      - _global/02_selling_point.md
+      - _global/03_power_system.md
+      - _global/03b_ai_applications.md
+      - _global/04_core_conflict.md
+      - _global/05_ending.md
+      - _global/06_characters.md
+      - _global/07_growth.md
+      - _global/08_volume_overview.md
+      - _global/09_pacing.md
+      - _global/09b_emotion_curves.md
+      - _global/10_foreshadowing.md
+      - _global/11_commercial.md
+      - review_report.md
+      - volumes/vol_01_*/volume_overview.md + phases/
+      - volumes/vol_02_*/volume_overview.md + phases/
+      - ...
+
+      请输出索引文件内容。
+    output_file: "{output_root}/_INDEX.md"
+    save_as: "index_content"
+
+  - id: "done_node"
+    type: "done"
+    dependencies: ["generate_index"]

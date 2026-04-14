@@ -1,0 +1,154 @@
+# 正文生成子流程
+# 职责：基于章纲生成正文内容
+# 输出：volumes/vol_XX_卷名/phases/phase_XX_阶段名/chapters/chapter_XX_正文.md
+# 注意：此流程在深度上色阶段最后触发
+
+name: "chapter_content_flow"
+version: "2.0"
+start: "generate_chapter_content"
+
+# 本流程使用摘要而非完整数据
+context_strategy: "使用分层摘要 + 章纲摘要 + 状态追踪"
+
+# 此流程属于深度上色阶段
+flow_phase: "deep_paint"
+
+nodes:
+  # 步骤1：生成正文
+  - id: "generate_chapter_content"
+    type: "llm"
+    next: "content_review"
+    system_prompt: |
+      你是资深网络小说作者。请基于章纲撰写正文。
+      文风要符合网络小说特点，节奏明快，爽点突出。
+    prompt_template: |
+      请基于以下信息撰写正文：
+
+      【章节信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 阶段序号：{phase_index}
+      - 阶段名：{phase_name}
+      - 章节序号：{chapter_index}
+      - 章节名：{chapter_outline_data[chapter_name]}
+
+      【章纲摘要（直接参考）】
+      - 核心事件：{chapter_summary_data[core_event_summary]}
+      - 情绪弧线：{chapter_summary_data[emotional_arc]}
+      - 关键场景：{chapter_summary_data[key_scenes]}
+      - 爽点设计：{chapter_summary_data[cool_point_summary]}
+      - 钩子：{chapter_summary_data[hook_summary]}
+
+      【章纲完整内容】
+      - 场景分解：{chapter_outline_data[scene_breakdown]}
+      - 高潮时刻：{chapter_outline_data[climax_moment]}
+      - 人物成长：{chapter_outline_data[character_growth_in_chapter]}
+
+      【全局上下文（摘要层）】
+      - 世界观核心规则：{worldview_summary[key_rules]}
+      - 力量体系简述：{worldview_summary[power_systems_brief]}
+      - 主角性格：{character_core[protagonist][personality_flaw]}
+      - 金手指能力：{power_system_summary[golden_finger_core]}
+      - 金手指限制：{power_system_summary[golden_finger_limits]}
+
+      【状态追踪层】
+      - 当前伏笔：{state_log[dynamic_state][foreshadowing_status]}
+      - 主角位置：{state_log[dynamic_state][character_positions][protagonist_current_volume]}
+      - 金手指状态：{state_log[dynamic_state][golden_finger_state]}
+
+      【写作要求】
+      1. 字数：{chapter_word_count} 字左右
+      2. 节奏：开篇抓人，中间有起伏，结尾留钩子
+      3. 爽点：设计要爽，但不宜过度
+      4. 对话：符合人物性格，简洁有力
+      5. 描写：场景描写服务于氛围，不要过度铺陈
+
+      请输出正文内容（Markdown 格式）。
+    output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/phases/phase_{phase_index:02d}_{phase_name}/chapters/chapter_{chapter_index:02d}_content.md"
+    save_as: "chapter_content"
+    llm:
+      temperature: 0.8
+
+  # 步骤2：正文质量审查
+  - id: "content_review"
+    type: "llm_json"
+    next: "update_state_after_chapter"
+    system_prompt: "进行正文质量审查。输出严格 JSON。"
+    prompt_template: |
+      请对以下正文进行质量审查：
+
+      【正文内容】
+      - 正文：{chapter_content}
+      - 对应章纲：{chapter_outline_data}
+
+      检查项：
+      1. 是否符合章纲要求
+      2. 人物对话是否符合性格
+      3. 金手指使用是否合理（未越界、有代价感）
+      4. 节奏是否合适（开篇抓人、有起伏、结尾钩子）
+      5. 爽点是否有效
+      6. 是否有逻辑漏洞
+
+      输出 JSON：
+      {{
+        "content_review": {{
+          "chapter_index": {chapter_index},
+          "status": "通过/需修改",
+          "quality_score": "质量评分（1-10）",
+          "strengths": ["优点"],
+          "issues": [
+            {{
+              "issue_description": "问题描述",
+              "severity": "阻塞/警告/建议",
+              "location": "段落/场景",
+              "suggestion": "建议修改方向"
+            }}
+          ],
+          "recommendation": "通过/建议修改后重生成"
+        }}
+      }}
+    save_as: "content_review_result"
+    llm:
+      temperature: 0.2
+
+  # 步骤3：更新状态追踪
+  - id: "update_state_after_chapter"
+    type: "llm_json"
+    next: "chapter_content_complete"
+    system_prompt: "更新状态追踪日志（追加模式）。输出严格 JSON。"
+    prompt_template: |
+      请基于本章生成结果，更新状态追踪日志。
+
+      【当前状态】
+      - 状态日志：{state_log}
+      - 本章章纲：{chapter_outline_data}
+      - 正文审查：{content_review_result}
+
+      请追加变更记录，不要覆盖现有日志。
+
+      输出 JSON：
+      {{
+        "state_log_update": {{
+          "change_log_append": [
+            {{
+              "timestamp": "章节 {chapter_index} 完成",
+              "source_node": "update_state_after_chapter",
+              "change_type": "chapter_complete",
+              "chapter_index": {chapter_index},
+              "changes": {{
+                "protagonist_status": "主角状态变化",
+                "golden_finger_status": "金手指状态变化",
+                "foreshadowing_updates": "伏笔状态更新",
+                "timeline_advance": "时间线推进"
+              }}
+            }}
+          ]
+        }}
+      }}
+    save_as: "chapter_state_update"
+    output_file: "{output_root}/_global/state_log.json"
+    llm:
+      temperature: 0.2
+
+  - id: "chapter_content_complete"
+    type: "done"
