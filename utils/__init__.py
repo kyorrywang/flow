@@ -6,7 +6,6 @@
 - fanout_utils: FanOut 节点工具
 - gather_utils: Gather 节点工具
 
-注意：OutputWriter, SafeFormatDict 已移至 tools.writer
 """
 from tools.writer import OutputWriter, SafeFormatDict
 from utils.llm_utils import build_llm_client

@@ -1,6 +1,6 @@
 # 单卷生成子流程
-# 职责：为每卷生成概述文件 + 展开阶段层
-# 输出：volumes/vol_XX_卷名/volume_overview.md + phases/
+# 职责：为每卷生成概述文件 + 展开故事线层
+# 输出：volumes/vol_XX_卷名/volume_overview.md + arcs/
 
 name: "volume_flow"
 version: "2.0"
@@ -31,7 +31,7 @@ nodes:
       - 本卷主线：{volume_main_plot}
       - 本卷人物成长要点：{volume_character_growth}
       - 大场景：{volume_set_pieces}
-      - 阶段数：{volume_phase_count}
+      - 故事线索：{volume_arc_count}
       - 卷末悬念：{volume_cliffhanger}
       - 与下卷衔接：{volume_connection}
 
@@ -50,18 +50,50 @@ nodes:
       {{
         "volume_overview": {{
           "synopsis": "卷内容概要（200字以内）",
-          "phase_breakdown": [
+          "volume_characters": [
             {{
-              "phase_index": 1,
-              "name": "阶段名称",
-              "phase_goal": "本阶段目标",
+              "name": "角色名",
+              "role": "本卷角色定位（新角色/回归角色/过渡角色）",
+              "relationship_to_protagonist": "与主角的关系",
+              "arc_in_this_volume": "本卷人物弧线"
+            }}
+          ],
+          "volume_antagonist": {{
+            "name": "本卷反派/对抗力量",
+            "motivation": "反派动机",
+            "power_level": "反派实力等级",
+            "conflict_with_protagonist": "与主角的冲突点",
+            "resolution": "本卷结局（被打脸/暂时退场/转化为盟友/升级回归）"
+          }},
+          "volume_map": {{
+            "primary_location": "本卷主要场景",
+            "location_features": ["场景特点1", "场景特点2"],
+            "dungeon_or_instance": "本卷副本/秘境（如有）",
+            "map_transition": "与上卷场景的转换方式"
+          }},
+          "golden_finger_unlock": {{
+            "new_ability": "本卷解锁的新能力/新功能",
+            "upgrade_condition": "解锁条件",
+            "first_use_scene": "首次惊艳使用场景",
+            "limitation_in_this_volume": "本卷仍存在的限制"
+          }},
+          "volume_foreshadowing": {{
+            "planted_in_this_volume": ["本卷埋入的伏笔"],
+            "revealed_in_this_volume": ["本卷回收的伏笔"],
+            "advanced_in_this_volume": ["本卷推进的伏笔"]
+          }},
+          "story_arc_breakdown": [
+            {{
+              "arc_index": 1,
+              "name": "故事线名称",
+              "arc_goal": "本故事线目标",
               "word_count": "预估字数",
               "rhythm_position": "节奏定位（铺垫/发展/小高潮/收尾）",
               "start_state": "起始状态",
               "end_state": "结束状态",
-              "golden_finger_available": "本阶段金手指可用功能",
+              "golden_finger_available": "本故事线金手指可用功能",
               "key_events": ["关键事件1", "关键事件2"],
-              "foreshadowing_in_this_phase": "本阶段涉及的伏笔"
+              "foreshadowing_in_this_arc": "本故事线涉及的伏笔"
             }}
           ],
           "volume_arc_contribution": "本卷对主角人物弧线的贡献",
@@ -72,47 +104,60 @@ nodes:
     save_as: "volume_overview_data"
     extract_keys:
       - "volume_overview"
+      - "story_arc_breakdown"
+      - "volume_characters"
+      - "volume_antagonist"
+      - "volume_map"
+      - "golden_finger_unlock"
+      - "volume_foreshadowing"
     output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/volume_overview.md"
     llm:
       temperature: 0.5
 
-  # 步骤2：展开阶段
-  - id: "fan_out_phases"
+  # 步骤2：展开故事线
+  - id: "fan_out_arcs"
     type: "fan_out"
-    next: "wait_phases_complete"
-    count_from: "{volume_overview_data[phase_breakdown]|length}"
-    target: "generate_phase_detail"
-    child_flow_name: "phase_flow"
+    next: "wait_arcs_complete"
+    count_from: "{story_arc_breakdown|length}"
+    target: "generate_arc_detail"
+    child_flow_name: "arc_flow"
     child_context:
+      # 卷级信息
       volume_index: "{volume_index}"
       volume_name: "{volume_name}"
       volume_core_conflict: "{volume_core_conflict}"
       volume_goal: "{volume_goal}"
       volume_golden_finger: "{volume_golden_finger}"
-      phase_index: "{fanout_index}"
-      phase_name: "{volume_overview_data[phase_breakdown][fanout_index-1][name]}"
-      phase_goal: "{volume_overview_data[phase_breakdown][fanout_index-1][phase_goal]}"
-      phase_word_count: "{volume_overview_data[phase_breakdown][fanout_index-1][word_count]}"
-      phase_rhythm: "{volume_overview_data[phase_breakdown][fanout_index-1][rhythm_position]}"
-      phase_start_state: "{volume_overview_data[phase_breakdown][fanout_index-1][start_state]}"
-      phase_end_state: "{volume_overview_data[phase_breakdown][fanout_index-1][end_state]}"
-      phase_golden_finger: "{volume_overview_data[phase_breakdown][fanout_index-1][golden_finger_available]}"
-      phase_key_events: "{volume_overview_data[phase_breakdown][fanout_index-1][key_events]}"
-      phase_foreshadowing: "{volume_overview_data[phase_breakdown][fanout_index-1][foreshadowing_in_this_phase]}"
-      # 传递全局上下文到阶段子流程
+      # 卷级新增设定
+      volume_characters: "{volume_characters}"
+      volume_antagonist: "{volume_antagonist}"
+      volume_map: "{volume_map}"
+      golden_finger_unlock: "{golden_finger_unlock}"
+      volume_foreshadowing: "{volume_foreshadowing}"
+      # 故事线级信息
+      arc_index: "{fanout_index}"
+      arc_name: "{story_arc_breakdown[fanout_index-1][name]}"
+      arc_goal: "{story_arc_breakdown[fanout_index-1][arc_goal]}"
+      arc_word_count: "{story_arc_breakdown[fanout_index-1][word_count]}"
+      arc_rhythm: "{story_arc_breakdown[fanout_index-1][rhythm_position]}"
+      arc_start_state: "{story_arc_breakdown[fanout_index-1][start_state]}"
+      arc_end_state: "{story_arc_breakdown[fanout_index-1][end_state]}"
+      arc_golden_finger: "{story_arc_breakdown[fanout_index-1][golden_finger_available]}"
+      arc_key_events: "{story_arc_breakdown[fanout_index-1][key_events]}"
+      arc_foreshadowing: "{story_arc_breakdown[fanout_index-1][foreshadowing_in_this_arc]}"
+      # 传递全局上下文到故事线子流程
       emotion_curves_full: "{emotion_curves_full}"
       foreshadowing_plan_full: "{foreshadowing_plan_full}"
       worldview_summary: "{worldview_summary}"
       power_system_summary: "{power_system_summary}"
       character_core: "{character_core}"
       golden_finger: "{golden_finger}"
-      state_log: "{state_log}"
-    save_as: "phase_run_ids"
+    save_as: "arc_run_ids"
 
-  - id: "wait_phases_complete"
+  - id: "wait_arcs_complete"
     type: "wait_children"
     next: "volume_local_review"
-    children_key: "phase_run_ids"
+    children_key: "arc_run_ids"
     on_child_failure: "fail_parent"
 
   # 步骤3：局部一致性审查（每卷完成后触发）
@@ -134,11 +179,12 @@ nodes:
       - 主角内核：{character_core}
       - 金手指：{golden_finger}
       - 结局摘要：{ending_summary}
+      - 主线矛盾：{core_conflict}
 
       【状态追踪（基于本卷生成结果）】
       - 本卷力量等级范围：{volume_power_range}
       - 本卷金手指能力边界：{volume_golden_finger}
-      - 本卷阶段分解：{volume_overview_data}
+      - 本卷故事线分解：{volume_overview_data}
 
       检查项：
       1. 卷末状态与下一卷起始状态是否一致
@@ -146,6 +192,9 @@ nodes:
       3. 金手指能力使用是否超出本卷边界
       4. 人物行为是否符合主角内核
       5. 伏笔埋入/回收是否自洽
+      6. 本卷角色定位是否合理（新角色/回归角色/过渡角色）
+      7. 本卷反派是否与主线矛盾一致
+      8. 本卷地图转换是否自然
 
       输出 JSON：
       {{
@@ -157,7 +206,7 @@ nodes:
             {{
               "issue_description": "问题描述",
               "severity": "阻塞/警告/建议",
-              "location": "涉及阶段/章节",
+              "location": "涉及故事线/章节",
               "suggestion": "建议修改方向"
             }}
           ]

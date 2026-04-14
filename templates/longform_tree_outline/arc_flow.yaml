@@ -1,0 +1,164 @@
+# 故事线生成子流程
+# 职责：为每个故事线生成详细概述文件
+# 输出：volumes/vol_XX_卷名/arcs/arc_XX_故事线名.md
+
+name: "arc_flow"
+version: "2.0"
+start: "generate_arc_detail"
+
+# 本流程使用摘要而非完整数据
+context_strategy: "使用分层摘要，避免传递全文"
+
+nodes:
+  # 步骤1：生成故事线详细概述
+  - id: "generate_arc_detail"
+    type: "llm_json"
+    next: "fan_out_chapters"
+    system_prompt: |
+      你是资深网络小说策划和编辑。请为当前故事线生成详细的概述。
+      这个文件将作为后续生成章纲和正文的直接参考。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      请为以下故事线生成详细的概述：
+
+      【故事线信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 故事线索引：{arc_index}
+      - 故事线名称：{arc_name}
+      - 本故事线目标：{arc_goal}
+      - 预估字数：{arc_word_count}
+      - 节奏定位：{arc_rhythm}
+      - 起始状态：{arc_start_state}
+      - 结束状态：{arc_end_state}
+      - 金手指可用功能：{arc_golden_finger}
+      - 关键事件：{arc_key_events}
+      - 涉及伏笔：{arc_foreshadowing}
+
+      【卷上下文】
+      - 本卷核心矛盾：{volume_core_conflict}
+      - 本卷目标：{volume_goal}
+      - 本卷金手指能力边界：{volume_golden_finger}
+      - 本卷角色清单：{volume_characters}
+      - 本卷反派：{volume_antagonist}
+      - 本卷地图：{volume_map}
+      - 本卷金手指解锁：{golden_finger_unlock}
+      - 本卷伏笔清单：{volume_foreshadowing}
+
+      【全局上下文（摘要层）】
+      - 世界观摘要：{worldview_summary}
+      - 力量体系摘要：{power_system_summary}
+      - 金手指核心能力：{power_system_summary[golden_finger_core]}
+      - 金手指限制：{power_system_summary[golden_finger_limits]}
+      - 主角内核：{character_core[protagonist][name]} - {character_core[protagonist][personality_flaw]}
+      - 情绪曲线（请提取对应条目）：{emotion_curves_full}
+      - 伏笔清单（请筛选与本故事线相关的条目）：{foreshadowing_plan_full}
+
+      请输出 JSON：
+      {{
+        "arc_detail": {{
+          "arc_synopsis": "故事线内容概要（100字以内）",
+          "arc_characters": {{
+            "active_characters": [
+              {{
+                "name": "角色名",
+                "role_in_this_arc": "本故事线角色作用",
+                "emotional_state": "本故事线情绪状态",
+                "goal_in_this_arc": "本故事线目标"
+              }}
+            ],
+            "new_characters_introduced": ["本故事线新出场角色"]
+          }},
+          "event_sequence": [
+            {{
+              "event_index": 1,
+              "event_name": "事件名称",
+              "event_description": "事件描述",
+              "emotional_beat": "情绪节拍",
+              "involved_characters": ["涉及角色1", "涉及角色2"],
+              "golden_finger_usage": "金手指使用情况",
+              "foreshadowing_planted": ["埋入的伏笔"],
+              "foreshadowing_revealed": ["揭示/回收的伏笔"],
+              "power_display": "力量展示"
+            }}
+          ],
+          "arc_climax": {{
+            "climax_event": "高潮事件",
+            "climax_description": "高潮描述",
+            "emotional_peak": "情绪峰值",
+            "golden_finger_moment": "金手指高光时刻"
+          }},
+          "golden_finger_usage": {{
+            "abilities_used": ["本故事线使用的能力"],
+            "usage_scenes": ["使用场景简述"],
+            "limitation_feel": "限制感体现",
+            "upgrade_hint": "升级暗示（如有）"
+          }},
+          "foreshadowing_operations": {{
+            "planted": ["本故事线埋入的伏笔"],
+            "revealed": ["本故事线回收的伏笔"],
+            "advanced": ["本故事线推进的伏笔"]
+          }},
+          "transition_to_next_arc": "与下一条故事线的衔接",
+          "chapter_count_estimate": "预估章节数（按每章3000字计算）",
+          "state_changes": {{
+            "protagonist_status": "主角状态变化",
+            "golden_finger_status": "金手指状态变化",
+            "world_status": "世界/势力状态变化",
+            "unresolved_threads": ["未解决的线索"]
+          }}
+        }}
+      }}
+    save_as: "arc_detail_data"
+    extract_keys:
+      - "arc_detail"
+    output_file: "{output_root}/volumes/vol_{volume_index:02d}_{volume_name}/arcs/arc_{arc_index:02d}_{arc_name}.md"
+    llm:
+      temperature: 0.6
+
+  # 步骤2：展开章纲（深度上色阶段触发）
+  # 注意：广度铺开阶段此节点被跳过，仅在深度上色阶段由引擎调度触发
+  - id: "fan_out_chapters"
+    type: "fan_out"
+    phase: "deep_paint"
+    next: "wait_chapters_complete"
+    count_from: "{arc_detail_data[arc_detail][chapter_count_estimate]}"
+    target: "generate_chapter_outline"
+    child_flow_name: "chapter_outline_flow"
+    child_context:
+      # 卷级信息
+      volume_index: "{volume_index}"
+      volume_name: "{volume_name}"
+      # 故事线级信息
+      arc_index: "{arc_index}"
+      arc_name: "{arc_name}"
+      arc_detail: "{arc_detail_data}"
+      chapter_index: "{fanout_index}"
+      chapter_word_count: "{arc_word_count} / {arc_detail_data[arc_detail][chapter_count_estimate]}"
+      # 卷级新增设定
+      volume_characters: "{volume_characters}"
+      volume_antagonist: "{volume_antagonist}"
+      volume_map: "{volume_map}"
+      golden_finger_unlock: "{golden_finger_unlock}"
+      volume_foreshadowing: "{volume_foreshadowing}"
+      # 故事线级新增设定
+      arc_characters: "{arc_detail_data[arc_detail][arc_characters]}"
+      arc_climax_detail: "{arc_detail_data[arc_detail][arc_climax]}"
+      golden_finger_usage: "{arc_detail_data[arc_detail][golden_finger_usage]}"
+      foreshadowing_operations: "{arc_detail_data[arc_detail][foreshadowing_operations]}"
+      # 传递全局上下文到章纲子流程
+      worldview_summary: "{worldview_summary}"
+      power_system_summary: "{power_system_summary}"
+      character_core: "{character_core}"
+      golden_finger: "{golden_finger}"
+      state_log: "{state_log}"
+    save_as: "chapter_run_ids"
+
+  - id: "wait_chapters_complete"
+    type: "wait_children"
+    next: "phase_complete"
+    children_key: "chapter_run_ids"
+    on_child_failure: "fail_parent"
+
+  - id: "phase_complete"
+    type: "done"
