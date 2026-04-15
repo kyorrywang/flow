@@ -1,0 +1,63 @@
+# Review criteria definitions for all 6 layers
+# Each layer has exactly 4 criteria with name + question
+# These are reference definitions — actual templates embed them inline
+
+novel_review:
+  - name: "节奏锚点"
+    question: "各卷节奏定位是否合理？（铺垫/发展/高潮/收尾的分布是否均匀，有无卷之间节奏雷同？）"
+  - name: "卷分工"
+    question: "卷的数量和分工是否合理？每卷是否有明确的核心矛盾和目标？"
+  - name: "一致性"
+    question: "与用户输入的核心诉求是否一致？题材类型、金手指设定、商业定位是否贯穿各卷？"
+  - name: "转场"
+    question: "卷与卷之间的衔接是否自然？每卷末尾悬念与下卷开头是否有呼应？"
+
+volume_review:
+  - name: "故事线分布"
+    question: "故事线的数量和分工是否合理？有无冗余或缺失？每条故事线是否有明确目标？"
+  - name: "卷内节奏"
+    question: "故事线之间的节奏是否有变化？（紧张→舒缓→紧张）有无节奏疲劳？"
+  - name: "全局一致性"
+    question: "是否与卷目标、主线矛盾、力量体系一致？金手指能力是否超出当前卷边界？"
+  - name: "转场设计"
+    question: "故事线之间的转场是否自然？有无生硬跳跃？每条故事线结尾是否有钩子？"
+
+arc_review:
+  - name: "高潮节奏"
+    question: "高潮数量是否合理？（通常4-6个）有无节奏疲劳？高潮间距是否合适？"
+  - name: "情绪曲线"
+    question: "是否有'压抑→爆发→收获'的完整循环？每个高潮是否有情绪积累和释放？"
+  - name: "高潮差异化"
+    question: "各高潮是否有独特性？有无重复感？每个高潮的冲突类型和解决方式是否不同？"
+  - name: "爽点结构预检"
+    question: "每个高潮是否预留了爽点的结构空间？（冲突铺垫→情绪蓄力→payoff兑现）"
+
+climax_review:
+  - name: "爽点结构完整性"
+    question: "每个爽点是否包含'冲突铺垫→情绪蓄力→payoff兑现'三阶段？有无跳过铺垫直接爽？"
+  - name: "爽点密度"
+    question: "爽点间距是否合理？（太密→审美疲劳，太疏→读者流失）每3章左右是否有一个满足点？"
+  - name: "高潮收束"
+    question: "最后一个爽点后是否有高潮收束和转场？高潮是否有足够的仪式感？"
+  - name: "3章留存率心智"
+    question: "每个爽点的铺垫是否在合理章节内完成？读者能否在3章左右获得一次满足感？"
+
+payoff_review:
+  - name: "章节节奏"
+    question: "章节分配是否合理？有无信息过载（一章塞太多）或空洞（一章内容太少）？"
+  - name: "冲突铺垫"
+    question: "铺垫章节是否有张力？不会让读者觉得无聊？铺垫中是否有小冲突或悬念维持阅读兴趣？"
+  - name: "payoff力度"
+    question: "兑现章节是否够爽？有没有辜负前面的情绪蓄力？payoff是否在意料之外、情理之中？"
+  - name: "章节钩子"
+    question: "每章结尾是否有吸引继续阅读的钩子？（悬念/反转/新信息/情绪高潮）"
+
+chapter_review:
+  - name: "场景张力"
+    question: "场景分解是否有冲突或张力？有无纯信息 dump 场景？每个场景是否有明确的目的？"
+  - name: "场景节奏"
+    question: "场景的数量和大小组合是否合理？（大场景+小场景交替，有无节奏单调？）"
+  - name: "金手指使用"
+    question: "金手指/特殊能力的使用是否合理？有无滥用（每场都用）或浪费（有但不用）？"
+  - name: "伏笔操作"
+    question: "本章是否有效埋入或回收伏笔？伏笔操作是否自然，有无过于刻意？"

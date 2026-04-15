@@ -1,0 +1,159 @@
+# 节奏驱动型小说大纲模板 - 第2层：故事线展开
+# 职责：为每条故事线生成详细设定 + N个高潮
+# 输出：故事线概述文件 + 高潮列表
+
+name: "arc_flow"
+version: "1.0"
+start: "generate_arc_detail"
+
+nodes:
+
+  # ==================== 阶段一：生成故事线详细设定 ====================
+
+  - id: "generate_arc_detail"
+    type: "llm_json_review"
+    next: "fan_out_climaxes"
+    system_prompt: |
+      你是资深网络小说策划和编辑。请为当前故事线生成详细的设定和高潮规划。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      【节奏心智模型（参考，非强制）】
+
+      你正在设计一个"高潮"，通常由以下结构组成：
+
+      ┌──────────────────────────────────────────────────────┐
+      │  高潮 (~10章)  目标指标: 10章追更率                     │
+      │                                                       │
+      │  ┌─────────┬─────────┬─────────┬──────────┐          │
+      │  │ 爽点1    │ 爽点2    │ 爽点3    │ 高潮收束  │          │
+      │  │ (~3章)   │ (~3章)   │ (~3章)   │ (~1章)   │          │
+      │  │ 铺垫蓄力  │ 铺垫蓄力  │ 铺垫蓄力  │ 转场     │          │
+      │  │ 兑现爽点  │ 兑现爽点  │ 兑现爽点  │          │          │
+      │  └─────────┴─────────┴─────────┴──────────┘          │
+      │                                                       │
+      │  节奏要点：                                            │
+      │  - 每个爽点包含"冲突铺垫→情绪蓄力→payoff兑现"三阶段     │
+      │  - 爽点之间可以有1章缓冲                                │
+      │  - 最后一个爽点后要有高潮收束和转场                      │
+      │  - 3章左右给读者一次满足感（留存率心智）                 │
+      └──────────────────────────────────────────────────────┘
+
+      你可以自由决定高潮数量和爽点数量，但保持节奏感。
+
+      【你的任务】
+      请为以下故事线生成详细的设定和高潮规划：
+
+      【故事线信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 故事线索引：{arc_index}
+      - 故事线名称：{arc_name}
+      - 本故事线目标：{arc_goal}
+      - 节奏定位：{arc_rhythm_position}
+      - 起始状态：{arc_start_state}
+      - 结束状态：{arc_end_state}
+      - 关键事件：{arc_key_events}
+      - 与下条故事线衔接：{arc_transition}
+
+      【卷上下文】
+      - 卷详细设定：{volume_detail}
+
+      请按照以下 JSON 结构输出：
+      {{
+        "arc_detail": {{
+          "synopsis": "故事线内容概要（100字以内）",
+          "active_characters": [
+            {{
+              "name": "角色名",
+              "role_in_this_arc": "本故事线角色作用",
+              "emotional_state": "本故事线情绪状态"
+            }}
+          ],
+          "antagonist_in_arc": "本故事线对抗力量",
+          "foreshadowing_operations": {{
+            "planted": ["本故事线埋入的伏笔"],
+            "revealed": ["本故事线回收的伏笔"]
+          }},
+          "state_changes": {{
+            "protagonist_status": "主角状态变化",
+            "world_status": "世界/势力状态变化"
+          }}
+        }},
+        "climaxes": [
+          {{
+            "climax_index": 1,
+            "name": "高潮名称",
+            "climax_goal": "本高潮目标",
+            "rhythm_position": "节奏定位（铺垫/发展/小高潮/大高潮/收尾）",
+            "emotional_theme": "情绪主题（压抑/紧张/释放/爽）",
+            "key_events": ["关键事件1", "关键事件2"],
+            "payoff_moment": "payoff兑现时刻描述",
+            "transition_to_next": "与下一个高潮的衔接"
+          }}
+        ]
+      }}
+    save_as: "arc_detail"
+    extract_keys:
+      - "arc_detail"
+      - "climaxes"
+    output_file: "{output_root}/volumes/vol_{volume_index}_{volume_name}/arcs/arc_{arc_index}_{arc_name}/arc_flow.md"
+    llm:
+      temperature: 0.6
+
+    # Review loop 配置
+    review_loop:
+      max_rounds: 3
+      review_system_prompt: |
+        你是资深网文编辑，正在进行故事线层审查。
+        输出严格的 JSON 格式。
+      review_criteria:
+        - name: "高潮节奏"
+          question: "高潮数量是否合理？（通常4-6个）有无节奏疲劳？高潮间距是否合适？"
+        - name: "情绪曲线"
+          question: "是否有'压抑→爆发→收获'的完整循环？每个高潮是否有情绪积累和释放？"
+        - name: "高潮差异化"
+          question: "各高潮是否有独特性？有无重复感？每个高潮的冲突类型和解决方式是否不同？"
+        - name: "爽点结构预检"
+          question: "每个高潮是否预留了爽点的结构空间？（冲突铺垫→情绪蓄力→payoff兑现）"
+      modify_system_prompt: |
+        你是作者，请根据审查意见修改故事线设定。
+        保持核心创意不变，针对性解决审查意见中指出的问题。
+        输出修改后的完整 JSON。
+
+  # ==================== 阶段二：展开高潮 ====================
+
+  - id: "fan_out_climaxes"
+    type: "fan_out"
+    next: "wait_climaxes_complete"
+    count_from: "{climaxes|length}"
+    target: "generate_climax_detail"
+    child_flow_name: "climax_flow"
+    child_context:
+      # 传递故事线设定
+      arc_detail: "{arc_detail}"
+      volume_index: "{volume_index}"
+      volume_name: "{volume_name}"
+      arc_index: "{arc_index}"
+      arc_name: "{arc_name}"
+      # 传递高潮信息
+      climax_index: "{fanout_index}"
+      climax_name: "{climaxes[fanout_index-1][name]}"
+      climax_goal: "{climaxes[fanout_index-1][climax_goal]}"
+      climax_flow: "{climaxes[fanout_index-1][rhythm_position]}"
+      climax_emotional_theme: "{climaxes[fanout_index-1][emotional_theme]}"
+      climax_key_events: "{climaxes[fanout_index-1][key_events]}"
+      climax_payoff: "{climaxes[fanout_index-1][payoff_moment]}"
+      climax_transition: "{climaxes[fanout_index-1][transition_to_next]}"
+      # 传递全局设定
+      global_settings: "{global_settings}"
+      all_climaxes: "{climaxes}"
+    save_as: "climax_run_ids"
+
+  - id: "wait_climaxes_complete"
+    type: "wait_children"
+    next: "arc_done"
+    children_key: "climax_run_ids"
+    on_child_failure: "warn"
+
+  - id: "arc_done"
+    type: "done"

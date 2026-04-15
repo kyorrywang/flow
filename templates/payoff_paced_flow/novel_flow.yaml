@@ -1,0 +1,181 @@
+# 节奏驱动型小说大纲模板 - 第0层：全局规划
+# 职责：解读用户输入 → 创建全局设定 + N卷概述
+# 输出：全局设定文件 + 卷列表
+
+name: "节奏小说大纲引擎"
+version: "1.0"
+start: "parse_input"
+
+# ==================== 输出根目录 ====================
+output_root: "{output_root}"
+
+# ==================== 模板元数据 ====================
+# 节奏模型（心智模型，非强制约束）
+rhythm_model:
+  hierarchy:
+    卷:   "200章 = 4条故事线"
+    故事线: "50章 = 5个高潮"
+    高潮:   "10章 = 3个爽点 + 1章收束转场"
+    爽点:   "3章 = 冲突铺垫→情绪蓄力→payoff兑现"
+
+nodes:
+
+  # ==================== 阶段一：输入解析 → 全局设定 ====================
+
+  - id: "parse_input"
+    type: "llm_json_review"
+    next: "init_serial"
+    system_prompt: |
+      你是资深网络小说策划编辑。请将用户的模糊需求拆解为结构化约束，并规划全局大纲。
+      输出严格的 JSON 格式，不要包含任何其他文本。
+    prompt_template: |
+      【节奏心智模型（参考，非强制）】
+
+      你正在规划一部长篇小说的全局大纲，目标结构：
+
+      ┌──────────────────────────────────────────────────────┐
+      │  卷 (~200章)  目标指标: 200章IP定调/商业价值            │
+      │                                                       │
+      │  ┌──────────┬──────────┬──────────┬──────────┐        │
+      │  │ 故事线1   │ 故事线2   │ 故事线3   │ 故事线4   │        │
+      │  │ (~50章)  │ (~50章)  │ (~50章)  │ (~50章)  │        │
+      │  │ 5个高潮   │ 5个高潮   │ 5个高潮   │ 5个高潮   │        │
+      │  └──────────┴──────────┴──────────┴──────────┘        │
+      │                                                       │
+      │  节奏要点：                                            │
+      │  - 每卷有明确的"本卷目标"和"核心矛盾"                    │
+      │  - 卷末必须有悬念或转折，自然过渡到下卷                   │
+      │  - 力量体系在每卷有明确的进阶范围                        │
+      │  - 金手指能力在每卷有明确的边界                          │
+      └──────────────────────────────────────────────────────┘
+
+      你可以自由决定卷数和每卷的故事线数量，但保持节奏感。
+
+      【你的任务】
+      请将以下小说创意拆解为结构化约束，并规划全局大纲：
+
+      用户输入：{user_input}
+
+      请按照以下 JSON 结构输出：
+      {{
+        "global_settings": {{
+          "genre_type": "题材类型",
+          "core_setting": "核心设定（金手指/世界观关键词）",
+          "platform": "发布平台",
+          "word_count_target": "篇幅目标",
+          "commercial_positioning": "商业定位",
+          "protagonist_growth": ["主角不可替代成长线1", "成长线2", "成长线3"],
+          "one_sentence_intro": "一句话简介（20字以内）",
+          "core_selling_points": ["卖点1", "卖点2", "卖点3"],
+          "emotional_hook": "情绪钩子"
+        }},
+        "volumes": [
+          {{
+            "volume_index": 1,
+            "name": "卷名",
+            "core_conflict": "本卷核心矛盾",
+            "volume_goal": "本卷目标",
+            "rhythm_position": "节奏定位（铺垫/发展/高潮/收尾）",
+            "word_count": "预估字数",
+            "arc_count": "本卷故事线数（3-5个）",
+            "cliffhanger": "卷末悬念",
+            "connection_to_next": "与下卷的衔接"
+          }}
+        ]
+      }}
+    save_as: "novel_detail"
+    extract_keys:
+      - "global_settings"
+      - "volumes"
+    output_file: "{output_root}/_global/00_novel_flow.md"
+    llm:
+      temperature: 0.4
+
+    # Review loop 配置
+    review_loop:
+      max_rounds: 3
+      review_system_prompt: |
+        你是资深网文编辑，正在进行全局大纲审查。
+        输出严格的 JSON 格式。
+      review_criteria:
+        - name: "节奏锚点"
+          question: "各卷节奏定位是否合理？（铺垫/发展/高潮/收尾的分布是否均匀，有无卷之间节奏雷同？）"
+        - name: "卷分工"
+          question: "卷的数量和分工是否合理？每卷是否有明确的核心矛盾和目标？"
+        - name: "一致性"
+          question: "与用户输入的核心诉求是否一致？题材类型、金手指设定、商业定位是否贯穿各卷？"
+        - name: "转场"
+          question: "卷与卷之间的衔接是否自然？每卷末尾悬念与下卷开头是否有呼应？"
+      modify_system_prompt: |
+        你是作者，请根据审查意见修改全局大纲。
+        保持核心创意不变，针对性解决审查意见中指出的问题。
+        输出修改后的完整 JSON。
+
+  # ==================== 阶段二：初始化串行卷处理 ====================
+
+  - id: "init_serial"
+    type: "llm_json"
+    next: "check_more_volumes"
+    system_prompt: |
+      输出JSON：{"current_volume_index": 1}
+    prompt_template: |
+      {{"current_volume_index": 1}}
+    save_as: "serial_state"
+    extract_keys:
+      - "current_volume_index"
+
+  # ==================== 阶段三：串行展开卷层（深度优先） ====================
+
+  - id: "check_more_volumes"
+    type: "branch"
+    condition_key: "{current_volume_index}"
+    branches:
+      "1": "spawn_volume"
+      "2": "spawn_volume"
+      "3": "spawn_volume"
+      "4": "spawn_volume"
+      "5": "spawn_volume"
+    default_next: "novel_done"
+
+  - id: "spawn_volume"
+    type: "fan_out"
+    next: "wait_volume_complete"
+    count_from: "1"
+    target: "generate_volume_detail"
+    child_flow_name: "volume_flow"
+    child_context:
+      # 传递全局设定
+      global_settings: "{global_settings}"
+      # 传递卷级信息
+      volume_index: "{current_volume_index}"
+      volume_name: "{volumes[current_volume_index-1][name]}"
+      volume_core_conflict: "{volumes[current_volume_index-1][core_conflict]}"
+      volume_goal: "{volumes[current_volume_index-1][volume_goal]}"
+      volume_flow_position: "{volumes[current_volume_index-1][rhythm_position]}"
+      volume_word_count: "{volumes[current_volume_index-1][word_count]}"
+      volume_arc_count: "{volumes[current_volume_index-1][arc_count]}"
+      volume_cliffhanger: "{volumes[current_volume_index-1][cliffhanger]}"
+      volume_connection: "{volumes[current_volume_index-1][connection_to_next]}"
+      # 传递全部卷列表（供子流程感知全局）
+      all_volumes: "{volumes}"
+    save_as: "current_volume_run_id"
+
+  - id: "wait_volume_complete"
+    type: "wait_children"
+    next: "advance_volume"
+    children_key: "current_volume_run_id"
+    on_child_failure: "warn"
+
+  - id: "advance_volume"
+    type: "llm_json"
+    next: "check_more_volumes"
+    system_prompt: |
+      读取 context 中的 current_volume_index，计算下一个卷序号并输出JSON：{"current_volume_index": 当前值+1}
+    prompt_template: |
+      {{"current_volume_index": {current_volume_index}}}
+    save_as: "serial_state"
+    extract_keys:
+      - "current_volume_index"
+
+  - id: "novel_done"
+    type: "done"

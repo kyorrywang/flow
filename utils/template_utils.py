@@ -131,7 +131,11 @@ def render_value(value: Any, context: dict[str, Any], *, index: int) -> Any:
         
         # 先尝试 format_map 处理简单变量
         try:
-            return processed.format_map(SafeFormatDict(merged))
+            result = processed.format_map(SafeFormatDict(merged))
+            # 如果结果包含未解析的 {path[...]} 模式，用 resolve_nested 处理
+            if '{' in result and '[' in result:
+                result = re.sub(r'\{[^}]+\[[^\]]+\][^\}]*\}', resolve_nested, result)
+            return result
         except:
             return processed
     if isinstance(value, list):

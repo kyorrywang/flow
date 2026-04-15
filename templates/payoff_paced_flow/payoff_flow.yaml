@@ -1,0 +1,155 @@
+# 节奏驱动型小说大纲模板 - 第4层：爽点展开
+# 职责：为每个爽点生成详细设定 + N章概述
+# 输出：爽点概述文件 + 章节大纲列表
+
+name: "payoff_flow"
+version: "1.0"
+start: "generate_payoff_detail"
+
+nodes:
+
+  # ==================== 阶段一：生成爽点详细设定 ====================
+
+  - id: "generate_payoff_detail"
+    type: "llm_json_review"
+    next: "fan_out_chapters"
+    system_prompt: |
+      你是资深网络小说编辑。请为当前爽点生成详细的设定和章节大纲规划。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      【节奏心智模型（参考，非强制）】
+
+      你正在设计"章节节奏"，每个爽点通常由以下结构组成：
+
+      ┌──────────────────────────────────────────────────────┐
+      │  爽点 (~3章)                                          │
+      │                                                       │
+      │  ┌──────────┬──────────┬──────────┐                  │
+      │  │ 冲突铺垫   │ 情绪蓄力   │ payoff  │                  │
+      │  │  (~1章)   │  (~1章)   │ 兑现(~1章)│                  │
+      │  └──────────┴──────────┴──────────┘                  │
+      │                                                       │
+      │  每章需要有：                                          │
+      │  - 明确的目标和冲突                                    │
+      │  - 章节结尾的钩子（悬念/反转/新信息/情绪高潮）           │
+      │  - 有效推进剧情或人物关系                               │
+      └──────────────────────────────────────────────────────┘
+
+      你可以自由决定章节数量，但保持节奏感。
+
+      【你的任务】
+      请为以下爽点生成详细的设定和章节大纲规划：
+
+      【爽点信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 故事线索引：{arc_index}
+      - 故事线名：{arc_name}
+      - 高潮序号：{climax_index}
+      - 高潮名：{climax_name}
+      - 爽点序号：{payoff_index}
+      - 爽点名称：{payoff_name}
+      - 本爽点目标：{payoff_goal}
+      - 节奏定位：{payoff_flow}
+      - 冲突铺垫：{payoff_setup}
+      - 情绪蓄力：{payoff_buildup}
+      - payoff兑现：{payoff_delivery}
+      - 爽点类型：{payoff_cool}
+      - 与下一个爽点衔接：{payoff_transition}
+
+      【高潮上下文】
+      - 高潮详细设定：{climax_detail}
+
+      请按照以下 JSON 结构输出：
+      {{
+        "payoff_detail": {{
+          "synopsis": "爽点内容概要（60字以内）",
+          "characters_involved": ["涉及角色"],
+          "key_conflict": "本爽点核心冲突",
+          "golden_finger_usage": "金手指使用（如有）",
+          "foreshadowing_operation": "伏笔操作（埋入/回收/推进）"
+        }},
+        "chapter_outlines": [
+          {{
+            "chapter_index": 1,
+            "chapter_name": "章节名称",
+            "chapter_goal": "本章目标（一句话）",
+            "rhythm_role": "本章在爽点中的角色（铺垫/蓄力/兑现/过渡）",
+            "core_event": "核心事件",
+            "emotional_beat": "情绪节拍（压抑/紧张/释放/爽）",
+            "cool_point": "爽点设计",
+            "hook_for_next": "下章钩子",
+            "scene_count_estimate": "预估场景数（2-4个）"
+          }}
+        ]
+      }}
+    save_as: "payoff_detail"
+    extract_keys:
+      - "payoff_detail"
+      - "chapter_outlines"
+    output_file: "{output_root}/volumes/vol_{volume_index}_{volume_name}/arcs/arc_{arc_index}_{arc_name}/climaxes/climax_{climax_index}_{climax_name}/payoffs/payoff_{payoff_index}_{payoff_name}/payoff_flow.md"
+    llm:
+      temperature: 0.6
+
+    # Review loop 配置
+    review_loop:
+      max_rounds: 3
+      review_system_prompt: |
+        你是资深网文编辑，正在进行爽点层审查。
+        输出严格的 JSON 格式。
+      review_criteria:
+        - name: "章节节奏"
+          question: "章节分配是否合理？有无信息过载（一章塞太多）或空洞（一章内容太少）？"
+        - name: "冲突铺垫"
+          question: "铺垫章节是否有张力？不会让读者觉得无聊？铺垫中是否有小冲突或悬念维持阅读兴趣？"
+        - name: "payoff力度"
+          question: "兑现章节是否够爽？有没有辜负前面的情绪蓄力？payoff是否在意料之外、情理之中？"
+        - name: "章节钩子"
+          question: "每章结尾是否有吸引继续阅读的钩子？（悬念/反转/新信息/情绪高潮）"
+      modify_system_prompt: |
+        你是作者，请根据审查意见修改爽点设定。
+        保持核心创意不变，针对性解决审查意见中指出的问题。
+        输出修改后的完整 JSON。
+
+  # ==================== 阶段二：展开章节 ====================
+
+  - id: "fan_out_chapters"
+    type: "fan_out"
+    next: "wait_chapters_complete"
+    count_from: "{chapter_outlines|length}"
+    target: "generate_chapter_scene"
+    child_flow_name: "chapter_flow"
+    child_context:
+      # 传递爽点设定
+      payoff_detail: "{payoff_detail}"
+      volume_index: "{volume_index}"
+      volume_name: "{volume_name}"
+      arc_index: "{arc_index}"
+      arc_name: "{arc_name}"
+      climax_index: "{climax_index}"
+      climax_name: "{climax_name}"
+      payoff_index: "{payoff_index}"
+      payoff_name: "{payoff_name}"
+      # 传递章节信息
+      chapter_index: "{fanout_index}"
+      chapter_name: "{chapter_outlines[fanout_index-1][chapter_name]}"
+      chapter_goal: "{chapter_outlines[fanout_index-1][chapter_goal]}"
+      chapter_flow_role: "{chapter_outlines[fanout_index-1][rhythm_role]}"
+      chapter_core_event: "{chapter_outlines[fanout_index-1][core_event]}"
+      chapter_emotional_beat: "{chapter_outlines[fanout_index-1][emotional_beat]}"
+      chapter_cool_point: "{chapter_outlines[fanout_index-1][cool_point]}"
+      chapter_hook: "{chapter_outlines[fanout_index-1][hook_for_next]}"
+      chapter_scene_count: "{chapter_outlines[fanout_index-1][scene_count_estimate]}"
+      # 传递全局设定
+      global_settings: "{global_settings}"
+      all_chapter_outlines: "{chapter_outlines}"
+    save_as: "chapter_run_ids"
+
+  - id: "wait_chapters_complete"
+    type: "wait_children"
+    next: "payoff_done"
+    children_key: "chapter_run_ids"
+    on_child_failure: "warn"
+
+  - id: "payoff_done"
+    type: "done"

@@ -1,0 +1,118 @@
+# 节奏驱动型小说大纲模板 - 第5层：章节场景分解
+# 职责：为每章生成详细的场景分解
+# 输出：章节场景分解文件（叶子层，无子流程）
+
+name: "chapter_flow"
+version: "1.0"
+start: "generate_chapter_scene"
+
+nodes:
+
+  # ==================== 阶段一：生成章节场景分解 ====================
+
+  - id: "generate_chapter_scene"
+    type: "llm_json_review"
+    next: "chapter_done"
+    system_prompt: |
+      你是资深网络小说编辑。请为当前章节生成详细的场景分解。
+      每个场景需要有明确的冲突或张力，避免纯信息 dump。
+      输出严格的 JSON 格式。
+    prompt_template: |
+      【节奏心智模型（参考，非强制）】
+
+      你正在分解一章为多个场景：
+
+      ┌──────────────────────────────────────────────────────┐
+      │  章节场景分解                                         │
+      │                                                       │
+      │  ┌────────┬────────┬──────┬────────┐                │
+      │  │ 场景1   │ 场景2   │ ...  │ 场景N   │                │
+      │  │         │         │      │         │                │
+      │  │ 每个场景需要有：                                    │
+      │  │ - 明确的冲突或张力                                  │
+      │  │ - 角色互动或行动推进                               │
+      │  │ - 服务于本章目标和情绪弧线                          │
+      │  └────────┴────────┴──────┴────────┘                │
+      │                                                       │
+      │  节奏要点：                                            │
+      │  - 场景之间要有节奏变化（大场景+小场景交替）             │
+      │  - 金手指使用要合理（不滥用、不浪费）                   │
+      │  - 有效埋入或回收伏笔                                  │
+      └──────────────────────────────────────────────────────┘
+
+      【你的任务】
+      请为以下章节生成详细的场景分解：
+
+      【章节信息】
+      - 卷序号：{volume_index}
+      - 卷名：{volume_name}
+      - 故事线索引：{arc_index}
+      - 故事线名：{arc_name}
+      - 高潮序号：{climax_index}
+      - 高潮名：{climax_name}
+      - 爽点序号：{payoff_index}
+      - 爽点名：{payoff_name}
+      - 章节序号：{chapter_index}
+      - 章节名称：{chapter_name}
+      - 本章目标：{chapter_goal}
+      - 节奏角色：{chapter_flow_role}
+      - 核心事件：{chapter_core_event}
+      - 情绪节拍：{chapter_emotional_beat}
+      - 爽点设计：{chapter_cool_point}
+      - 下章钩子：{chapter_hook}
+      - 预估场景数：{chapter_scene_count}
+
+      【爽点上下文】
+      - 爽点详细设定：{payoff_detail}
+
+      请按照以下 JSON 结构输出：
+      {{
+        "chapter_scene_breakdown": {{
+          "chapter_synopsis": "本章场景概要（50字以内）",
+          "scenes": [
+            {{
+              "scene_index": 1,
+              "scene_name": "场景名称",
+              "scene_description": "场景描述（30-50字）",
+              "location": "场景地点",
+              "characters_involved": ["涉及角色"],
+              "conflict_or_tension": "冲突或张力",
+              "scene_purpose": "场景目的（推进剧情/人物关系/伏笔/情绪）",
+              "golden_finger_usage": "金手指使用（如有，一句话）",
+              "foreshadowing": "伏笔操作（埋入/回收/推进，如无则空）",
+              "emotional_note": "情绪备注"
+            }}
+          ],
+          "chapter_ending": "本章结尾（如何衔接钩子）",
+          "word_count_estimate": "预估字数"
+        }}
+      }}
+    save_as: "chapter_scene"
+    extract_keys:
+      - "chapter_scene_breakdown"
+    output_file: "{output_root}/volumes/vol_{volume_index}_{volume_name}/arcs/arc_{arc_index}_{arc_name}/climaxes/climax_{climax_index}_{climax_name}/payoffs/payoff_{payoff_index}_{payoff_name}/chapters/chapter_{chapter_index}_scene.md"
+    llm:
+      temperature: 0.6
+
+    # Review loop 配置
+    review_loop:
+      max_rounds: 3
+      review_system_prompt: |
+        你是资深网文编辑，正在进行章节层审查。
+        输出严格的 JSON 格式。
+      review_criteria:
+        - name: "场景张力"
+          question: "场景分解是否有冲突或张力？有无纯信息 dump 场景？每个场景是否有明确的目的？"
+        - name: "场景节奏"
+          question: "场景的数量和大小组合是否合理？（大场景+小场景交替，有无节奏单调？）"
+        - name: "金手指使用"
+          question: "金手指/特殊能力的使用是否合理？有无滥用（每场都用）或浪费（有但不用）？"
+        - name: "伏笔操作"
+          question: "本章是否有效埋入或回收伏笔？伏笔操作是否自然，有无过于刻意？"
+      modify_system_prompt: |
+        你是作者，请根据审查意见修改章节场景分解。
+        保持核心创意不变，针对性解决审查意见中指出的问题。
+        输出修改后的完整 JSON。
+
+  - id: "chapter_done"
+    type: "done"

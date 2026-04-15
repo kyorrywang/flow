@@ -34,10 +34,13 @@ ENV/
 
 # Project specific ignores
 outputs/
+openspec/
 config.json
 
-# IDEs
+# IDEs / Tools
 .vscode/
 .idea/
 *.swp
 *.swo
+.opencode/
+.qwen/
